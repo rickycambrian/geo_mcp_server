@@ -1,0 +1,28 @@
+{
+  "name": "geo-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for interfacing with the Geo protocol and SDK",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "geo-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@geoprotocol/geo-sdk": "latest",
+    "@geoprotocol/grc-20": "latest",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "viem": "^2.23.2",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}
