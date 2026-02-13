@@ -5,7 +5,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Graph, Id, SystemIds, IdUtils } from '@geoprotocol/geo-sdk';
 import { z } from 'zod';
-import { session, type EditSession } from '../state/session.js';
+import type { EditSession } from '../state/session.js';
 
 export function registerAdvancedTools(server: McpServer, session: EditSession): void {
   // ── generate_id ──────────────────────────────────────────────────────
@@ -365,36 +365,50 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
         .describe('Values to add'),
     },
     async ({ entityId, values }) => {
-      const typedValues = values.map((v) => buildTypedValue(v.property, v.type, v.value));
+      try {
+        const typedValues = values.map((v) => buildTypedValue(v.property, v.type, v.value));
 
-      const result = Graph.updateEntity({
-        id: entityId,
-        values: typedValues,
-      });
+        const result = Graph.updateEntity({
+          id: entityId,
+          values: typedValues,
+        });
 
-      session.addOps(result.ops, {
-        id: result.id,
-        type: 'entity',
-        name: `Update entity ${entityId}`,
-        opsCount: result.ops.length,
-      });
+        session.addOps(result.ops, {
+          id: result.id,
+          type: 'entity',
+          name: `Update entity ${entityId}`,
+          opsCount: result.ops.length,
+        });
 
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(
-              {
-                entityId: result.id,
-                valuesAdded: values.length,
-                opsCount: result.ops.length,
-              },
-              null,
-              2,
-            ),
-          },
-        ],
-      };
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
+                {
+                  entityId: result.id,
+                  valuesAdded: values.length,
+                  opsCount: result.ops.length,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({
+                error: `Failed to add values: ${error instanceof Error ? error.message : String(error)}`,
+              }),
+            },
+          ],
+          isError: true,
+        };
+      }
     },
   );
 

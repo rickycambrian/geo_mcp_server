@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Graph } from '@geoprotocol/geo-sdk';
 import { z } from 'zod';
-import { session, type EditSession } from '../state/session.js';
+import type { EditSession } from '../state/session.js';
 
 const DataTypeEnum = z.enum([
   'TEXT',
@@ -67,7 +67,7 @@ function err(error: unknown) {
   };
 }
 
-export function registerGraphTools(server: McpServer, _session: EditSession) {
+export function registerGraphTools(server: McpServer, session: EditSession) {
   // ── create_property ──────────────────────────────────────────────
   server.tool(
     'create_property',
