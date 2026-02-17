@@ -1,5 +1,6 @@
 export class EditSession {
     ops = [];
+    lastPublishedOps = [];
     artifacts = [];
     _privateKey = null;
     _spaceId = null;
@@ -11,12 +12,21 @@ export class EditSession {
     getOps() {
         return [...this.ops];
     }
+    setLastPublishedOps(ops) {
+        this.lastPublishedOps = [...ops];
+    }
+    getLastPublishedOps() {
+        return [...this.lastPublishedOps];
+    }
     getArtifacts() {
         return [...this.artifacts];
     }
-    clear() {
+    clear(options) {
         this.ops = [];
         this.artifacts = [];
+        if (options?.includeLastPublished) {
+            this.lastPublishedOps = [];
+        }
     }
     get opsCount() {
         return this.ops.length;
@@ -42,6 +52,7 @@ export class EditSession {
     getStatus() {
         return {
             opsCount: this.ops.length,
+            lastPublishedOpsCount: this.lastPublishedOps.length,
             artifacts: [...this.artifacts],
             walletConfigured: this._privateKey !== null,
             spaceId: this._spaceId,

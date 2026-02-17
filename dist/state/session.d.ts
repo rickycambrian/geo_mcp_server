@@ -11,6 +11,7 @@ export interface CreatedArtifact {
 }
 export interface SessionStatus {
     opsCount: number;
+    lastPublishedOpsCount: number;
     artifacts: CreatedArtifact[];
     walletConfigured: boolean;
     spaceId: string | null;
@@ -18,14 +19,19 @@ export interface SessionStatus {
 }
 export declare class EditSession {
     private ops;
+    private lastPublishedOps;
     private artifacts;
     private _privateKey;
     private _spaceId;
     private _walletAddress;
     addOps(ops: Op[], artifact: CreatedArtifact): void;
     getOps(): Op[];
+    setLastPublishedOps(ops: Op[]): void;
+    getLastPublishedOps(): Op[];
     getArtifacts(): CreatedArtifact[];
-    clear(): void;
+    clear(options?: {
+        includeLastPublished?: boolean;
+    }): void;
     get opsCount(): number;
     get privateKey(): string | null;
     set privateKey(key: string | null);

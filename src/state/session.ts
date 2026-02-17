@@ -13,6 +13,7 @@ export interface CreatedArtifact {
 
 export interface SessionStatus {
   opsCount: number;
+  lastPublishedOpsCount: number;
   artifacts: CreatedArtifact[];
   walletConfigured: boolean;
   spaceId: string | null;
@@ -21,6 +22,7 @@ export interface SessionStatus {
 
 export class EditSession {
   private ops: Op[] = [];
+  private lastPublishedOps: Op[] = [];
   private artifacts: CreatedArtifact[] = [];
   private _privateKey: string | null = null;
   private _spaceId: string | null = null;
@@ -35,13 +37,24 @@ export class EditSession {
     return [...this.ops];
   }
 
+  setLastPublishedOps(ops: Op[]): void {
+    this.lastPublishedOps = [...ops];
+  }
+
+  getLastPublishedOps(): Op[] {
+    return [...this.lastPublishedOps];
+  }
+
   getArtifacts(): CreatedArtifact[] {
     return [...this.artifacts];
   }
 
-  clear(): void {
+  clear(options?: { includeLastPublished?: boolean }): void {
     this.ops = [];
     this.artifacts = [];
+    if (options?.includeLastPublished) {
+      this.lastPublishedOps = [];
+    }
   }
 
   get opsCount(): number {
@@ -75,6 +88,7 @@ export class EditSession {
   getStatus(): SessionStatus {
     return {
       opsCount: this.ops.length,
+      lastPublishedOpsCount: this.lastPublishedOps.length,
       artifacts: [...this.artifacts],
       walletConfigured: this._privateKey !== null,
       spaceId: this._spaceId,

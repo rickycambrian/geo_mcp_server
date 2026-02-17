@@ -211,6 +211,7 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
         await publicClient.waitForTransactionReceipt({ hash: txHash });
 
         const opsPublished = ops.length;
+        session.setLastPublishedOps(ops);
         session.clear();
 
         return {
@@ -281,8 +282,9 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
         };
       }
 
-      const ops = session.getOps();
-      if (ops.length === 0) {
+      const pendingOps = session.getOps();
+      const opsToPropose = pendingOps.length > 0 ? pendingOps : session.getLastPublishedOps();
+      if (opsToPropose.length === 0) {
         return {
           content: [
             {
@@ -297,17 +299,21 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
       }
 
       try {
+        const normalizedDaoSpaceAddress = normalizeAddress(daoSpaceAddress, 'daoSpaceAddress');
+        const normalizedDaoSpaceId = normalizeBytes16Hex(daoSpaceId, 'daoSpaceId');
+        const normalizedCallerSpaceId = normalizeBytes16Hex(session.spaceId, 'callerSpaceId');
+
         // Create an account entity to use as author
         const { accountId, ops: accountOps } = Account.make(session.walletAddress!);
-        const allOps = [...accountOps, ...ops];
+        const allOps = [...accountOps, ...opsToPropose];
 
         const { editId, cid, to, calldata, proposalId } = await daoSpace.proposeEdit({
           name,
           ops: allOps,
           author: accountId,
-          daoSpaceAddress: daoSpaceAddress as `0x${string}`,
-          callerSpaceId: (`0x` + session.spaceId) as `0x${string}`,
-          daoSpaceId: daoSpaceId as `0x${string}`,
+          daoSpaceAddress: normalizedDaoSpaceAddress,
+          callerSpaceId: normalizedCallerSpaceId,
+          daoSpaceId: normalizedDaoSpaceId,
           votingMode,
           network: 'TESTNET',
         });
@@ -322,8 +328,8 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
         });
         await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-        const opsProposed = ops.length;
-        session.clear();
+        const opsProposed = opsToPropose.length;
+        session.clear({ includeLastPublished: true });
 
         return {
           content: [
@@ -380,7 +386,8 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
     {},
     async () => {
       const previousOpsCount = session.opsCount;
-      session.clear();
+      const previousLastPublishedOpsCount = session.getLastPublishedOps().length;
+      session.clear({ includeLastPublished: true });
       return {
         content: [
           {
@@ -388,10 +395,32 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
             text: JSON.stringify({
               message: 'Session cleared',
               previousOpsCount,
+              previousLastPublishedOpsCount,
             }),
           },
         ],
       };
     },
   );
+}
+
+function withHexPrefix(value: string): `0x${string}` {
+  const trimmed = value.trim().toLowerCase();
+  return (trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`) as `0x${string}`;
+}
+
+function normalizeAddress(value: string, field: string): `0x${string}` {
+  const normalized = withHexPrefix(value);
+  if (!/^0x[0-9a-f]{40}$/.test(normalized)) {
+    throw new Error(`${field} must be an EVM address (20-byte hex, with or without 0x prefix)`);
+  }
+  return normalized;
+}
+
+function normalizeBytes16Hex(value: string, field: string): `0x${string}` {
+  const normalized = withHexPrefix(value);
+  if (!/^0x[0-9a-f]{32}$/.test(normalized)) {
+    throw new Error(`${field} must be bytes16 hex (0x followed by 32 hex chars). Received: ${value}`);
+  }
+  return normalized;
 }

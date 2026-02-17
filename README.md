@@ -6,6 +6,7 @@ MCP server providing full access to the [Geo protocol](https://geo.xyz) SDK for 
 
 - **21 tools** covering the full Geo SDK surface
 - **Session-based op accumulation** - build complex edits across multiple tool calls, then publish as a single atomic transaction
+- **Publish-to-propose continuity** - `propose_dao_edit` can reuse the latest published ops for seamless `publish_edit -> propose_dao_edit` flows
 - **Name-based resolution** - reference properties, types, and entities by name instead of IDs
 - **Gas-sponsored smart accounts** - no testnet ETH needed (uses Pimlico paymaster)
 - **Secure local file ingestion** - load local JSON/markdown/text files from allowlisted paths

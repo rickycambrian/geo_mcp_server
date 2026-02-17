@@ -173,6 +173,7 @@ export function registerSpaceTools(server, session) {
             });
             await publicClient.waitForTransactionReceipt({ hash: txHash });
             const opsPublished = ops.length;
+            session.setLastPublishedOps(ops);
             session.clear();
             return {
                 content: [
@@ -235,8 +236,9 @@ export function registerSpaceTools(server, session) {
                 isError: true,
             };
         }
-        const ops = session.getOps();
-        if (ops.length === 0) {
+        const pendingOps = session.getOps();
+        const opsToPropose = pendingOps.length > 0 ? pendingOps : session.getLastPublishedOps();
+        if (opsToPropose.length === 0) {
             return {
                 content: [
                     {
@@ -250,16 +252,19 @@ export function registerSpaceTools(server, session) {
             };
         }
         try {
+            const normalizedDaoSpaceAddress = normalizeAddress(daoSpaceAddress, 'daoSpaceAddress');
+            const normalizedDaoSpaceId = normalizeBytes16Hex(daoSpaceId, 'daoSpaceId');
+            const normalizedCallerSpaceId = normalizeBytes16Hex(session.spaceId, 'callerSpaceId');
             // Create an account entity to use as author
             const { accountId, ops: accountOps } = Account.make(session.walletAddress);
-            const allOps = [...accountOps, ...ops];
+            const allOps = [...accountOps, ...opsToPropose];
             const { editId, cid, to, calldata, proposalId } = await daoSpace.proposeEdit({
                 name,
                 ops: allOps,
                 author: accountId,
-                daoSpaceAddress: daoSpaceAddress,
-                callerSpaceId: (`0x` + session.spaceId),
-                daoSpaceId: daoSpaceId,
+                daoSpaceAddress: normalizedDaoSpaceAddress,
+                callerSpaceId: normalizedCallerSpaceId,
+                daoSpaceId: normalizedDaoSpaceId,
                 votingMode,
                 network: 'TESTNET',
             });
@@ -271,8 +276,8 @@ export function registerSpaceTools(server, session) {
                 transport: http(TESTNET_RPC_URL),
             });
             await publicClient.waitForTransactionReceipt({ hash: txHash });
-            const opsProposed = ops.length;
-            session.clear();
+            const opsProposed = opsToPropose.length;
+            session.clear({ includeLastPublished: true });
             return {
                 content: [
                     {
@@ -317,7 +322,8 @@ export function registerSpaceTools(server, session) {
     // ── clear_session ─────────────────────────────────────────────────
     server.tool('clear_session', 'Clear all accumulated ops', {}, async () => {
         const previousOpsCount = session.opsCount;
-        session.clear();
+        const previousLastPublishedOpsCount = session.getLastPublishedOps().length;
+        session.clear({ includeLastPublished: true });
         return {
             content: [
                 {
@@ -325,10 +331,29 @@ export function registerSpaceTools(server, session) {
                     text: JSON.stringify({
                         message: 'Session cleared',
                         previousOpsCount,
+                        previousLastPublishedOpsCount,
                     }),
                 },
             ],
         };
     });
+}
+function withHexPrefix(value) {
+    const trimmed = value.trim().toLowerCase();
+    return (trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`);
+}
+function normalizeAddress(value, field) {
+    const normalized = withHexPrefix(value);
+    if (!/^0x[0-9a-f]{40}$/.test(normalized)) {
+        throw new Error(`${field} must be an EVM address (20-byte hex, with or without 0x prefix)`);
+    }
+    return normalized;
+}
+function normalizeBytes16Hex(value, field) {
+    const normalized = withHexPrefix(value);
+    if (!/^0x[0-9a-f]{32}$/.test(normalized)) {
+        throw new Error(`${field} must be bytes16 hex (0x followed by 32 hex chars). Received: ${value}`);
+    }
+    return normalized;
 }
 //# sourceMappingURL=spaces.js.map
