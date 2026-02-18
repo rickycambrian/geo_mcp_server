@@ -16,6 +16,9 @@ import {
   normalizeBytes16Hex,
 } from '../utils/wallet.js';
 
+// Shared public client – created once per process instead of on every tool call.
+const publicClient = createPublicClient({ transport: http(TESTNET_RPC_URL) });
+
 export function registerSpaceTools(server: McpServer, session: EditSession): void {
   // ── configure_wallet ──────────────────────────────────────────────
   server.tool(
@@ -84,17 +87,11 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
             to,
             data: calldata,
           });
-          const publicClient = createPublicClient({
-            transport: http(TESTNET_RPC_URL),
-          });
           await publicClient.waitForTransactionReceipt({ hash: txHash });
           created = true;
         }
 
         // Look up space ID from the registry contract
-        const publicClient = createPublicClient({
-          transport: http(TESTNET_RPC_URL),
-        });
         const spaceIdHex = await publicClient.readContract({
           address: TESTNET.SPACE_REGISTRY_ADDRESS,
           abi: SpaceRegistryAbi,
@@ -201,10 +198,6 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
         const txHash = await smartAccountClient.sendTransaction({
           to,
           data: calldata,
-        });
-
-        const publicClient = createPublicClient({
-          transport: http(TESTNET_RPC_URL),
         });
         await publicClient.waitForTransactionReceipt({ hash: txHash });
 
@@ -321,10 +314,6 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
         const txHash = await smartAccountClient.sendTransaction({
           to,
           data: calldata,
-        });
-
-        const publicClient = createPublicClient({
-          transport: http(TESTNET_RPC_URL),
         });
         await publicClient.waitForTransactionReceipt({ hash: txHash });
 

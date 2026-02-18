@@ -4,6 +4,8 @@ import { TESTNET } from '@geoprotocol/geo-sdk/contracts';
 import { createPublicClient, http } from 'viem';
 import { z } from 'zod';
 import { ensureWalletConfigured, normalizeAddress, normalizeBytes16Hex, } from '../utils/wallet.js';
+// Shared public client – created once per process instead of on every tool call.
+const publicClient = createPublicClient({ transport: http(TESTNET_RPC_URL) });
 export function registerSpaceTools(server, session) {
     // ── configure_wallet ──────────────────────────────────────────────
     server.tool('configure_wallet', 'Configure the wallet with a private key to enable publishing', {
@@ -59,16 +61,10 @@ export function registerSpaceTools(server, session) {
                     to,
                     data: calldata,
                 });
-                const publicClient = createPublicClient({
-                    transport: http(TESTNET_RPC_URL),
-                });
                 await publicClient.waitForTransactionReceipt({ hash: txHash });
                 created = true;
             }
             // Look up space ID from the registry contract
-            const publicClient = createPublicClient({
-                transport: http(TESTNET_RPC_URL),
-            });
             const spaceIdHex = await publicClient.readContract({
                 address: TESTNET.SPACE_REGISTRY_ADDRESS,
                 abi: SpaceRegistryAbi,
@@ -163,9 +159,6 @@ export function registerSpaceTools(server, session) {
             const txHash = await smartAccountClient.sendTransaction({
                 to,
                 data: calldata,
-            });
-            const publicClient = createPublicClient({
-                transport: http(TESTNET_RPC_URL),
             });
             await publicClient.waitForTransactionReceipt({ hash: txHash });
             const opsPublished = ops.length;
@@ -269,9 +262,6 @@ export function registerSpaceTools(server, session) {
             const txHash = await smartAccountClient.sendTransaction({
                 to,
                 data: calldata,
-            });
-            const publicClient = createPublicClient({
-                transport: http(TESTNET_RPC_URL),
             });
             await publicClient.waitForTransactionReceipt({ hash: txHash });
             const opsProposed = opsToPropose.length;
