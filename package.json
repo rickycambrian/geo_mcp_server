@@ -1,6 +1,6 @@
 {
   "name": "geo-mcp-server",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "description": "MCP server providing full access to the Geo protocol SDK for knowledge graph operations",
   "type": "module",
   "main": "dist/index.js",

@@ -5,6 +5,7 @@ export class EditSession {
     _privateKey = null;
     _spaceId = null;
     _walletAddress = null;
+    _smartAccountClient = null;
     addOps(ops, artifact) {
         this.ops.push(...ops);
         this.artifacts.push(artifact);
@@ -49,6 +50,12 @@ export class EditSession {
     set walletAddress(address) {
         this._walletAddress = address;
     }
+    get smartAccountClient() {
+        return this._smartAccountClient;
+    }
+    set smartAccountClient(client) {
+        this._smartAccountClient = client;
+    }
     getStatus() {
         return {
             opsCount: this.ops.length,
@@ -56,6 +63,7 @@ export class EditSession {
             artifacts: [...this.artifacts],
             walletConfigured: this._privateKey !== null,
             spaceId: this._spaceId,
+            walletAddress: this._walletAddress,
             network: 'TESTNET',
         };
     }

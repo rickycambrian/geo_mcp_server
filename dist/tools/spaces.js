@@ -3,13 +3,22 @@ import { SpaceRegistryAbi } from '@geoprotocol/geo-sdk/abis';
 import { TESTNET } from '@geoprotocol/geo-sdk/contracts';
 import { createPublicClient, http } from 'viem';
 import { z } from 'zod';
-let smartAccountClient = null;
 async function ensureWalletConfigured(session, privateKeyOverride) {
-    // If already configured for this session, we're done.
-    if (session.privateKey && session.walletAddress && smartAccountClient) {
+    const normalizedOverride = privateKeyOverride ? withHexPrefix(privateKeyOverride) : null;
+    const normalizedSessionKey = session.privateKey ? withHexPrefix(session.privateKey) : null;
+    const sessionClient = session.smartAccountClient;
+    // Reuse the existing client only if it matches the session wallet address and
+    // we're not being asked to switch keys.
+    if (normalizedSessionKey
+        && session.walletAddress
+        && sessionClient
+        && sessionClient.account.address.toLowerCase() === session.walletAddress.toLowerCase()
+        && (!normalizedOverride || normalizedOverride === normalizedSessionKey)) {
         return { ok: true, address: session.walletAddress };
     }
-    const privateKey = privateKeyOverride ?? session.privateKey ?? process.env.GEO_PRIVATE_KEY;
+    const privateKey = normalizedOverride
+        ?? normalizedSessionKey
+        ?? (process.env.GEO_PRIVATE_KEY ? withHexPrefix(process.env.GEO_PRIVATE_KEY) : null);
     if (!privateKey) {
         return {
             ok: false,
@@ -18,7 +27,7 @@ async function ensureWalletConfigured(session, privateKeyOverride) {
     }
     try {
         const client = await getSmartAccountWalletClient({ privateKey: privateKey });
-        smartAccountClient = client;
+        session.smartAccountClient = client;
         session.privateKey = privateKey;
         session.walletAddress = client.account.address;
         return { ok: true, address: client.account.address };
@@ -61,7 +70,7 @@ export function registerSpaceTools(server, session) {
     // ── setup_space ───────────────────────────────────────────────────
     server.tool('setup_space', 'Ensure personal space exists and get space ID', {}, async () => {
         const ensured = await ensureWalletConfigured(session);
-        if (!ensured.ok || !session.walletAddress || !smartAccountClient) {
+        if (!ensured.ok || !session.walletAddress || !session.smartAccountClient) {
             return {
                 content: [
                     {
@@ -75,6 +84,7 @@ export function registerSpaceTools(server, session) {
             };
         }
         try {
+            const smartAccountClient = session.smartAccountClient;
             const address = session.walletAddress;
             const alreadyHasSpace = await personalSpace.hasSpace({ address });
             let created = false;
@@ -133,7 +143,7 @@ export function registerSpaceTools(server, session) {
     // ── publish_edit ──────────────────────────────────────────────────
     server.tool('publish_edit', 'Publish all accumulated ops as an edit to personal space', { name: z.string().describe('Name for the edit') }, async ({ name }) => {
         const ensured = await ensureWalletConfigured(session);
-        if (!ensured.ok || !smartAccountClient) {
+        if (!ensured.ok || !session.smartAccountClient) {
             return {
                 content: [
                     {
@@ -174,6 +184,7 @@ export function registerSpaceTools(server, session) {
             };
         }
         try {
+            const smartAccountClient = session.smartAccountClient;
             // Create an account entity to use as author
             const { accountId, ops: accountOps } = Account.make(session.walletAddress);
             const allOps = [...accountOps, ...ops];
@@ -231,7 +242,7 @@ export function registerSpaceTools(server, session) {
         votingMode: z.enum(['FAST', 'SLOW']).default('FAST').describe('Voting mode'),
     }, async ({ name, daoSpaceAddress, daoSpaceId, votingMode }) => {
         const ensured = await ensureWalletConfigured(session);
-        if (!ensured.ok || !smartAccountClient) {
+        if (!ensured.ok || !session.smartAccountClient) {
             return {
                 content: [
                     {
@@ -273,6 +284,7 @@ export function registerSpaceTools(server, session) {
             };
         }
         try {
+            const smartAccountClient = session.smartAccountClient;
             const normalizedDaoSpaceAddress = normalizeAddress(daoSpaceAddress, 'daoSpaceAddress');
             const normalizedDaoSpaceId = normalizeBytes16Hex(daoSpaceId, 'daoSpaceId');
             const normalizedCallerSpaceId = normalizeBytes16Hex(session.spaceId, 'callerSpaceId');

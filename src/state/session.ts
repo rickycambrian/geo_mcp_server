@@ -3,6 +3,7 @@
  * Manages op accumulation across tool calls and tracks created artifacts.
  */
 import type { Op } from '@geoprotocol/grc-20';
+import type { GeoSmartAccount } from '@geoprotocol/geo-sdk';
 
 export interface CreatedArtifact {
   id: string;
@@ -17,6 +18,7 @@ export interface SessionStatus {
   artifacts: CreatedArtifact[];
   walletConfigured: boolean;
   spaceId: string | null;
+  walletAddress: string | null;
   network: 'TESTNET';
 }
 
@@ -27,6 +29,7 @@ export class EditSession {
   private _privateKey: string | null = null;
   private _spaceId: string | null = null;
   private _walletAddress: string | null = null;
+  private _smartAccountClient: GeoSmartAccount | null = null;
 
   addOps(ops: Op[], artifact: CreatedArtifact): void {
     this.ops.push(...ops);
@@ -85,6 +88,14 @@ export class EditSession {
     this._walletAddress = address;
   }
 
+  get smartAccountClient(): GeoSmartAccount | null {
+    return this._smartAccountClient;
+  }
+
+  set smartAccountClient(client: GeoSmartAccount | null) {
+    this._smartAccountClient = client;
+  }
+
   getStatus(): SessionStatus {
     return {
       opsCount: this.ops.length,
@@ -92,6 +103,7 @@ export class EditSession {
       artifacts: [...this.artifacts],
       walletConfigured: this._privateKey !== null,
       spaceId: this._spaceId,
+      walletAddress: this._walletAddress,
       network: 'TESTNET',
     };
   }
