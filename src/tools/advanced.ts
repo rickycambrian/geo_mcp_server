@@ -56,6 +56,7 @@ const GraphEntityInputSchema = z.object({
   name: z.string().describe('Entity name'),
   typeName: z
     .string()
+    .optional()
     .describe(
       'Primary type name or type ID. Prefer a type name from schema, but you may pass a type ID to reference an existing type.',
     ),
@@ -75,7 +76,27 @@ const GraphEntityInputSchema = z.object({
     )
     .optional()
     .describe('Property values for this entity'),
-});
+})
+  .superRefine((entity, ctx) => {
+    // Historically we required typeName, but LLMs sometimes omit it and provide only typeNames.
+    // Accept that pattern as long as at least one type is provided.
+    if (!entity.typeName && (!entity.typeNames || entity.typeNames.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Either typeName or typeNames must be provided',
+        path: ['typeName'],
+      });
+    }
+  })
+  .transform((entity) => {
+    if (entity.typeName) return entity;
+    const [primary, ...rest] = entity.typeNames ?? [];
+    return {
+      ...entity,
+      typeName: primary,
+      typeNames: rest.length > 0 ? rest : undefined,
+    };
+  });
 
 const GraphRelationInputSchema = z.object({
   fromEntityName: z.string().describe('Name of the source entity'),
@@ -660,7 +681,7 @@ function createKnowledgeGraph(
         entity.typeName,
         ...(entity.typeNames ?? []),
       ]
-        .map((t) => typeMap.get(t) ?? t)
+        .map((t) => (typeof t === 'string' ? (typeMap.get(t) ?? t) : t))
         .filter((t): t is string => typeof t === 'string' && t.length > 0);
       const uniqueTypeIds = [...new Set(typeIds)];
 
