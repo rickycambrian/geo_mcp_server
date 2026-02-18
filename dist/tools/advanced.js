@@ -129,6 +129,104 @@ const CreateKnowledgeGraphInputSchema = z.object({
 const MAX_LOCAL_FILE_BYTES = 1_000_000;
 const MAX_LOCAL_FILE_PREVIEW_BYTES = 250_000;
 const DEFAULT_CANONICAL_CLAIM_TYPE_ID = '96f859efa1ca4b229372c86ad58b694b';
+const CANONICAL_RESEARCH_SCHEMA_IDS = {
+    types: {
+        researchPaper: '5296626122e04c2f8cebc2e0a864e84a',
+        researchClaim: '7cccaa4f7e3542dea227910a67dcb083',
+        researchAuthor: 'c2b804853c8e42bc9e2d7fa9db9f72d0',
+        researchVenue: 'abbfb48854184502bfccae82de8a0781',
+    },
+    properties: {
+        // Research Paper
+        paperTitle: 'fcb6a0d48e6447589427c50396959fd4',
+        abstract: '841be82f388a40429ddac7f4a4bb2ab2',
+        arxivId: 'a2dca941b5604e6594efdf804aa125da',
+        doi: '2b81eb1d736843dba560ba77363e0c14',
+        publicationDate: '083e3f2ff16b493f91ca8f71b7439a73',
+        pdfUrl: '503f7a3691c947aab7ef3838c22402c6',
+        htmlUrl: '851c5073916642a0a66e44de72885f8e',
+        arxivCategory: 'a20ce6ca37154316a43c9796904d8883',
+        authorsJson: 'a0e9410bf89142208f85591e20b25bed',
+        citationCount: 'd8381d27ee4144ed843fa0a5646d8565',
+        claimCount: '656be50a208047e9a54bc4168b05f16b',
+        topics: '640b0f39d3af4ba7af55380c09a66ba6',
+        processingStatus: 'ce500244fb3144338300618b6127e6bf',
+        processedAt: 'ae581b83bbb440628fc5603a557955ce',
+        source: 'c8f4ce2a29224779816b4ffa089dea25',
+        // Research Claim
+        claimText: 'e43c247c6bfe45cfb0730a4cfea48870',
+        claimType: 'c58847436e4244d0a572f39eb6f74372',
+        section: 'a4f90bb88d0b4e87815ee37d5b13152f',
+        pageNumber: 'ad3f600ff8734b79bfb99baacd780573',
+        paragraphId: '3bd8744492084559a61d985f3ebd5b43',
+        faithfulnessScore: '75d25ce465014ef5a3aa489f7172a00e',
+        isAtomic: '9f2d2d9d742b4241b7111753d2cec20c',
+        isDecontextualized: '0a5db51a22e64235b86e5231c5a4154c',
+        confidence: '2368df25ceb8478297b7a1cd606d8b77',
+        verificationStatus: 'f68ce99a44c14966971f1c2614cada9c',
+        sourceSentence: 'd38bad0e728c443396807f2e9ae021fe',
+        extractedEntitiesJson: '02cfa21e1e0f402a86a36fdf2aeaee44',
+        extractedRelationsJson: 'd810c9be3fee42bab04399f88fa593d5',
+    },
+    relations: {
+        extractedFrom: '3c54079f0357493ebed8d66e873b542e',
+    },
+};
+const ResearchAuthorInputSchema = z.object({
+    name: z.string().min(1),
+    affiliation: z.string().optional(),
+    orcid: z.string().optional(),
+});
+const ResearchPaperInputSchema = z.object({
+    title: z.string().min(1).describe('Full paper title'),
+    abstract: z.string().optional(),
+    arxivId: z.string().optional().describe('arXiv ID without prefix (e.g. 2502.10855)'),
+    doi: z.string().optional(),
+    publicationDate: z.string().optional().describe('ISO datetime or YYYY-MM-DD'),
+    pdfUrl: z.string().optional(),
+    htmlUrl: z.string().optional(),
+    arxivCategory: z.string().optional(),
+    authors: z.array(ResearchAuthorInputSchema).optional(),
+    authorsJson: z.string().optional().describe('JSON string of authors (if already computed)'),
+    topics: z.union([z.string(), z.array(z.string())]).optional(),
+    source: z.string().optional().describe('e.g. \"arxiv\"'),
+});
+const ResearchClaimInputSchema = z.object({
+    claimText: z.string().min(1),
+    claimType: z
+        .string()
+        .optional()
+        .describe('hypothesis|result|methodology|background|limitation|future_work|definition|comparison'),
+    section: z.string().optional(),
+    confidence: z.union([z.string(), z.number()]).optional(),
+    isAtomic: z.boolean().optional(),
+    isDecontextualized: z.boolean().optional(),
+    sourceSentence: z.string().optional(),
+    extractedEntities: z.unknown().optional(),
+    extractedRelations: z.unknown().optional(),
+    pageNumber: z.number().int().optional(),
+    paragraphId: z.union([z.number().int(), z.string()]).optional(),
+    faithfulnessScore: z.union([z.string(), z.number()]).optional(),
+    verificationStatus: z.string().optional(),
+});
+function coerceIsoDatetime(input) {
+    const trimmed = input.trim();
+    if (!trimmed)
+        return trimmed;
+    // Accept full ISO values as-is.
+    if (trimmed.includes('T'))
+        return trimmed;
+    // Accept YYYY-MM-DD and convert to midnight UTC.
+    if (/^\\d{4}-\\d{2}-\\d{2}$/.test(trimmed))
+        return `${trimmed}T00:00:00.000Z`;
+    return trimmed;
+}
+function shortText(input, max = 120) {
+    const cleaned = input.replace(/\\s+/g, ' ').trim();
+    if (cleaned.length <= max)
+        return cleaned;
+    return `${cleaned.slice(0, max - 1)}…`;
+}
 export function registerAdvancedTools(server, session) {
     // ── generate_id ──────────────────────────────────────────────────────
     server.tool('generate_id', 'Generate one or more unique Geo knowledge graph IDs (dashless UUID v4)', {
@@ -426,6 +524,218 @@ export function registerAdvancedTools(server, session) {
                         type: 'text',
                         text: JSON.stringify({
                             error: `Failed to add values: ${error instanceof Error ? error.message : String(error)}`,
+                        }),
+                    },
+                ],
+                isError: true,
+            };
+        }
+    });
+    // ── create_research_paper_and_claims ─────────────────────────────────
+    server.tool('create_research_paper_and_claims', 'Create a Research Paper entity and multiple Research Claim entities using the canonical Geo research schema. Claim entities are always multi-typed with the canonical GeoBrowser Claim type so they show up in standard Claim views.', {
+        paper: ResearchPaperInputSchema.describe('Paper metadata'),
+        claims: z
+            .array(ResearchClaimInputSchema)
+            .min(1)
+            .max(200)
+            .describe('Claims extracted from the paper'),
+        createExtractedFromRelations: z
+            .boolean()
+            .optional()
+            .describe('If true, creates Extracted From relations from each claim to the paper (default true)'),
+        canonicalClaimTypeId: z
+            .string()
+            .optional()
+            .describe('Override canonical Claim type ID (default env GEO_CANONICAL_CLAIM_TYPE_ID or built-in)'),
+        paperName: z
+            .string()
+            .optional()
+            .describe('Optional override for the paper entity name (defaults to "Paper: <title> (arXiv:<id>)")'),
+        paperDescription: z
+            .string()
+            .optional()
+            .describe('Optional override for paper description'),
+        claimNamePrefix: z
+            .string()
+            .optional()
+            .describe('Prefix for claim entity names (default "Claim: ")'),
+    }, async ({ paper, claims, createExtractedFromRelations, canonicalClaimTypeId, paperName, paperDescription, claimNamePrefix, }) => {
+        try {
+            const canonicalClaimType = (canonicalClaimTypeId ?? process.env.GEO_CANONICAL_CLAIM_TYPE_ID ?? '').trim()
+                || DEFAULT_CANONICAL_CLAIM_TYPE_ID;
+            const shouldCreateRelations = createExtractedFromRelations ?? true;
+            const now = new Date().toISOString();
+            const arxivId = paper.arxivId?.replace(/^arxiv:/i, '').trim() || undefined;
+            const derivedPdfUrl = arxivId ? `https://arxiv.org/pdf/${arxivId}` : undefined;
+            const derivedHtmlUrl = arxivId ? `https://arxiv.org/abs/${arxivId}` : undefined;
+            const authorsJson = paper.authorsJson
+                ?? (paper.authors ? JSON.stringify(paper.authors) : undefined);
+            const topicsText = typeof paper.topics === 'string'
+                ? paper.topics
+                : (Array.isArray(paper.topics) ? JSON.stringify(paper.topics) : undefined);
+            const paperEntityName = paperName
+                ?? `Paper: ${paper.title}${arxivId ? ` (arXiv:${arxivId})` : ''}`;
+            const paperEntityDescription = paperDescription ?? 'Research paper ingested via Geo MCP research tools.';
+            const paperValues = [];
+            paperValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.paperTitle, 'text', paper.title));
+            if (paper.abstract) {
+                paperValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.abstract, 'text', paper.abstract));
+            }
+            if (arxivId) {
+                paperValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.arxivId, 'text', arxivId));
+            }
+            if (paper.doi) {
+                paperValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.doi, 'text', paper.doi));
+            }
+            const publicationDate = paper.publicationDate ? coerceIsoDatetime(paper.publicationDate) : undefined;
+            if (publicationDate) {
+                paperValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.publicationDate, 'datetime', publicationDate));
+            }
+            const pdfUrl = paper.pdfUrl ?? derivedPdfUrl;
+            if (pdfUrl) {
+                paperValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.pdfUrl, 'text', pdfUrl));
+            }
+            const htmlUrl = paper.htmlUrl ?? derivedHtmlUrl;
+            if (htmlUrl) {
+                paperValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.htmlUrl, 'text', htmlUrl));
+            }
+            if (paper.arxivCategory) {
+                paperValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.arxivCategory, 'text', paper.arxivCategory));
+            }
+            if (authorsJson) {
+                paperValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.authorsJson, 'text', authorsJson));
+            }
+            paperValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.claimCount, 'integer', claims.length));
+            if (topicsText) {
+                paperValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.topics, 'text', topicsText));
+            }
+            paperValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.processingStatus, 'text', 'draft'));
+            paperValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.processedAt, 'datetime', now));
+            paperValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.source, 'text', paper.source ?? 'arxiv'));
+            const paperResult = Graph.createEntity({
+                name: paperEntityName,
+                description: paperEntityDescription,
+                types: [CANONICAL_RESEARCH_SCHEMA_IDS.types.researchPaper],
+                values: paperValues,
+            });
+            session.addOps(paperResult.ops, {
+                id: paperResult.id,
+                type: 'entity',
+                name: paperEntityName,
+                opsCount: paperResult.ops.length,
+            });
+            const claimIds = [];
+            const relationIds = [];
+            let opsAdded = paperResult.ops.length;
+            const prefix = claimNamePrefix ?? 'Claim: ';
+            for (let i = 0; i < claims.length; i++) {
+                const claim = claims[i];
+                const key = arxivId ? `arXiv:${arxivId}:${i + 1}` : `claim:${i + 1}`;
+                const claimEntityName = `${prefix}${key} ${shortText(claim.claimText, 120)}`;
+                const claimEntityDescription = shortText(claim.claimText, 280);
+                const claimValues = [];
+                claimValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.claimText, 'text', claim.claimText));
+                if (claim.claimType) {
+                    claimValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.claimType, 'text', claim.claimType));
+                }
+                if (claim.section) {
+                    claimValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.section, 'text', claim.section));
+                }
+                if (claim.pageNumber !== undefined) {
+                    claimValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.pageNumber, 'integer', claim.pageNumber));
+                }
+                if (claim.paragraphId !== undefined) {
+                    const n = typeof claim.paragraphId === 'string' ? Number(claim.paragraphId) : claim.paragraphId;
+                    if (Number.isFinite(n)) {
+                        claimValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.paragraphId, 'integer', n));
+                    }
+                }
+                if (claim.faithfulnessScore !== undefined) {
+                    claimValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.faithfulnessScore, 'text', String(claim.faithfulnessScore)));
+                }
+                if (claim.isAtomic !== undefined) {
+                    claimValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.isAtomic, 'boolean', claim.isAtomic));
+                }
+                if (claim.isDecontextualized !== undefined) {
+                    claimValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.isDecontextualized, 'boolean', claim.isDecontextualized));
+                }
+                if (claim.confidence !== undefined) {
+                    claimValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.confidence, 'text', String(claim.confidence)));
+                }
+                if (claim.verificationStatus) {
+                    claimValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.verificationStatus, 'text', claim.verificationStatus));
+                }
+                if (claim.sourceSentence) {
+                    claimValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.sourceSentence, 'text', claim.sourceSentence));
+                }
+                if (claim.extractedEntities !== undefined) {
+                    claimValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.extractedEntitiesJson, 'text', JSON.stringify(claim.extractedEntities)));
+                }
+                if (claim.extractedRelations !== undefined) {
+                    claimValues.push(buildTypedValue(CANONICAL_RESEARCH_SCHEMA_IDS.properties.extractedRelationsJson, 'text', JSON.stringify(claim.extractedRelations)));
+                }
+                const claimResult = Graph.createEntity({
+                    name: claimEntityName,
+                    description: claimEntityDescription,
+                    types: [
+                        CANONICAL_RESEARCH_SCHEMA_IDS.types.researchClaim,
+                        canonicalClaimType,
+                    ],
+                    values: claimValues,
+                });
+                session.addOps(claimResult.ops, {
+                    id: claimResult.id,
+                    type: 'entity',
+                    name: claimEntityName,
+                    opsCount: claimResult.ops.length,
+                });
+                claimIds.push(claimResult.id);
+                opsAdded += claimResult.ops.length;
+                if (shouldCreateRelations) {
+                    const rel = Graph.createRelation({
+                        fromEntity: claimResult.id,
+                        toEntity: paperResult.id,
+                        type: CANONICAL_RESEARCH_SCHEMA_IDS.relations.extractedFrom,
+                    });
+                    session.addOps(rel.ops, {
+                        id: rel.id,
+                        type: 'relation',
+                        name: `${claimResult.id} -> ${paperResult.id} (Extracted From)`,
+                        opsCount: rel.ops.length,
+                    });
+                    relationIds.push(rel.id);
+                    opsAdded += rel.ops.length;
+                }
+            }
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: JSON.stringify({
+                            paper: {
+                                id: paperResult.id,
+                                name: paperEntityName,
+                                arxivId,
+                            },
+                            claims: {
+                                count: claimIds.length,
+                                ids: claimIds,
+                            },
+                            relations: shouldCreateRelations ? { extractedFrom: relationIds } : { extractedFrom: [] },
+                            canonicalClaimType,
+                            opsAdded,
+                        }, null, 2),
+                    },
+                ],
+            };
+        }
+        catch (error) {
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: JSON.stringify({
+                            error: `Failed to create research entities: ${error instanceof Error ? error.message : String(error)}`,
                         }),
                     },
                 ],
