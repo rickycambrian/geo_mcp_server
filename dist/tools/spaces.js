@@ -4,51 +4,70 @@ import { TESTNET } from '@geoprotocol/geo-sdk/contracts';
 import { createPublicClient, http } from 'viem';
 import { z } from 'zod';
 let smartAccountClient = null;
+async function ensureWalletConfigured(session, privateKeyOverride) {
+    // If already configured for this session, we're done.
+    if (session.privateKey && session.walletAddress && smartAccountClient) {
+        return { ok: true, address: session.walletAddress };
+    }
+    const privateKey = privateKeyOverride ?? session.privateKey ?? process.env.GEO_PRIVATE_KEY;
+    if (!privateKey) {
+        return {
+            ok: false,
+            error: 'Wallet not configured. Configure GEO_PRIVATE_KEY secret (recommended) or call configure_wallet with a privateKey.',
+        };
+    }
+    try {
+        const client = await getSmartAccountWalletClient({ privateKey: privateKey });
+        smartAccountClient = client;
+        session.privateKey = privateKey;
+        session.walletAddress = client.account.address;
+        return { ok: true, address: client.account.address };
+    }
+    catch (error) {
+        return {
+            ok: false,
+            error: `Failed to configure wallet: ${error instanceof Error ? error.message : String(error)}`,
+        };
+    }
+}
 export function registerSpaceTools(server, session) {
     // ── configure_wallet ──────────────────────────────────────────────
-    server.tool('configure_wallet', 'Configure the wallet with a private key to enable publishing', { privateKey: z.string().describe('Hex private key with 0x prefix') }, async ({ privateKey }) => {
-        try {
-            const client = await getSmartAccountWalletClient({
-                privateKey: privateKey,
-            });
-            smartAccountClient = client;
-            session.privateKey = privateKey;
-            session.walletAddress = client.account.address;
+    server.tool('configure_wallet', 'Configure the wallet with a private key to enable publishing', {
+        privateKey: z
+            .string()
+            .optional()
+            .describe('Hex private key with 0x prefix (optional; if omitted uses GEO_PRIVATE_KEY secret)'),
+    }, async ({ privateKey }) => {
+        const ensured = await ensureWalletConfigured(session, privateKey);
+        if (!ensured.ok) {
             return {
-                content: [
-                    {
-                        type: 'text',
-                        text: JSON.stringify({
-                            address: client.account.address,
-                            message: 'Wallet configured successfully',
-                        }),
-                    },
-                ],
-            };
-        }
-        catch (error) {
-            return {
-                content: [
-                    {
-                        type: 'text',
-                        text: JSON.stringify({
-                            error: `Failed to configure wallet: ${error instanceof Error ? error.message : String(error)}`,
-                        }),
-                    },
-                ],
+                content: [{ type: 'text', text: JSON.stringify({ error: ensured.error }) }],
                 isError: true,
             };
         }
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: JSON.stringify({
+                        address: ensured.address,
+                        message: 'Wallet configured successfully',
+                        source: privateKey ? 'provided' : 'env',
+                    }),
+                },
+            ],
+        };
     });
     // ── setup_space ───────────────────────────────────────────────────
     server.tool('setup_space', 'Ensure personal space exists and get space ID', {}, async () => {
-        if (!session.privateKey || !session.walletAddress || !smartAccountClient) {
+        const ensured = await ensureWalletConfigured(session);
+        if (!ensured.ok || !session.walletAddress || !smartAccountClient) {
             return {
                 content: [
                     {
                         type: 'text',
                         text: JSON.stringify({
-                            error: 'Wallet not configured. Call configure_wallet first.',
+                            error: ensured.ok ? 'Wallet not configured.' : ensured.error,
                         }),
                     },
                 ],
@@ -113,13 +132,14 @@ export function registerSpaceTools(server, session) {
     });
     // ── publish_edit ──────────────────────────────────────────────────
     server.tool('publish_edit', 'Publish all accumulated ops as an edit to personal space', { name: z.string().describe('Name for the edit') }, async ({ name }) => {
-        if (!session.privateKey || !smartAccountClient) {
+        const ensured = await ensureWalletConfigured(session);
+        if (!ensured.ok || !smartAccountClient) {
             return {
                 content: [
                     {
                         type: 'text',
                         text: JSON.stringify({
-                            error: 'Wallet not configured. Call configure_wallet first.',
+                            error: ensured.ok ? 'Wallet not configured.' : ensured.error,
                         }),
                     },
                 ],
@@ -210,13 +230,14 @@ export function registerSpaceTools(server, session) {
         daoSpaceId: z.string().describe('DAO space ID (0x hex bytes16)'),
         votingMode: z.enum(['FAST', 'SLOW']).default('FAST').describe('Voting mode'),
     }, async ({ name, daoSpaceAddress, daoSpaceId, votingMode }) => {
-        if (!session.privateKey || !smartAccountClient) {
+        const ensured = await ensureWalletConfigured(session);
+        if (!ensured.ok || !smartAccountClient) {
             return {
                 content: [
                     {
                         type: 'text',
                         text: JSON.stringify({
-                            error: 'Wallet not configured. Call configure_wallet first.',
+                            error: ensured.ok ? 'Wallet not configured.' : ensured.error,
                         }),
                     },
                 ],
