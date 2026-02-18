@@ -4,7 +4,9 @@ MCP server providing full access to the [Geo protocol](https://geo.xyz) SDK for 
 
 ## Features
 
-- **21 tools** covering the full Geo SDK surface
+- **38 tools** covering the full Geo SDK surface: read, write, and govern
+- **GraphQL read layer** - search entities, browse spaces, query proposals and votes
+- **DAO governance** - vote on proposals, propose editor/subspace changes
 - **Session-based op accumulation** - build complex edits across multiple tool calls, then publish as a single atomic transaction
 - **Publish-to-propose continuity** - `propose_dao_edit` can reuse the latest published ops for seamless `publish_edit -> propose_dao_edit` flows
 - **Name-based resolution** - reference properties, types, and entities by name instead of IDs
@@ -39,6 +41,7 @@ Add to your MCP client config (e.g. Claude Code `.mcp.json`):
 
 The `GEO_PRIVATE_KEY` environment variable is optional at startup - you can also configure the wallet at runtime using the `configure_wallet` tool.
 `GEO_MCP_ALLOWED_PATHS` is optional and lets you allow additional directories for `read_local_file` and `create_knowledge_graph_from_file`. By default, only the current working directory is allowed.
+`GEO_GRAPHQL_URL` optionally overrides the GraphQL API endpoint (default: `https://api-testnet.geobrowser.io/graphql`).
 
 ## Quick Start
 
@@ -129,6 +132,31 @@ Expected JSON shape inside the file:
 | `add_values_to_entity` | Add multiple property values to an existing entity |
 | `get_system_ids` | Get well-known Geo system IDs (types, properties, data types) |
 
+### Read & Query (10 tools)
+
+| Tool | Description |
+|------|-------------|
+| `search_entities` | Full-text search for entities with optional space/type filters |
+| `get_entity` | Get full entity details (values, relations, backlinks, types) |
+| `list_entities` | Browse entities with filters for space, type, and name |
+| `get_space` | Get space details with editor/member counts and recent proposals |
+| `list_spaces` | Browse spaces with optional type filter (PERSONAL/DAO) |
+| `get_type` | Get type definition with properties |
+| `list_types` | List types in a specific space |
+| `get_proposals` | List proposals for a space (newest first) |
+| `get_proposal` | Get full proposal details with vote breakdown |
+| `get_proposal_votes` | List votes for a specific proposal |
+
+### DAO Governance (5 tools)
+
+| Tool | Description |
+|------|-------------|
+| `vote_on_proposal` | Cast YES/NO/ABSTAIN vote on a DAO proposal |
+| `propose_accept_editor` | Propose adding a new editor to a DAO space |
+| `propose_remove_editor` | Propose removing an editor from a DAO space |
+| `propose_accept_subspace` | Propose accepting a subspace into a DAO space |
+| `propose_remove_subspace` | Propose removing a subspace from a DAO space |
+
 ### Supported Data Types
 
 `TEXT`, `INTEGER`, `FLOAT`, `BOOLEAN`, `DATE`, `TIME`, `DATETIME`, `SCHEDULE`, `POINT`, `DECIMAL`, `BYTES`, `EMBEDDING`, `RELATION`
@@ -140,6 +168,8 @@ npm run dev        # Run with tsx (hot reload)
 npm run build      # Compile TypeScript
 npm run typecheck  # Type check without emitting
 npm start          # Run compiled version
+npm test           # Run unit tests
+npm run test:watch # Run tests in watch mode
 ```
 
 ## Network

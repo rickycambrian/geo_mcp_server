@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Graph } from '@geoprotocol/geo-sdk';
 import { z } from 'zod';
 import type { EditSession } from '../state/session.js';
+import { ok, err } from './helpers.js';
 
 const DataTypeEnum = z.enum([
   'TEXT',
@@ -55,17 +56,6 @@ const UnsetPropertySchema = z.object({
   property: z.string(),
   language: z.string().optional(),
 });
-
-function ok(data: Record<string, unknown>) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
-}
-
-function err(error: unknown) {
-  return {
-    content: [{ type: 'text' as const, text: JSON.stringify({ error: String(error) }) }],
-    isError: true as const,
-  };
-}
 
 export function registerGraphTools(server: McpServer, session: EditSession) {
   // ── create_property ──────────────────────────────────────────────

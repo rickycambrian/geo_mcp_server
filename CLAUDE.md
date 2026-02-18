@@ -10,12 +10,18 @@ MCP server that provides full access to the Geo protocol SDK for knowledge graph
 - `src/tools/graph.ts` - Core graph operations (create/update/delete property, type, entity, relation, image)
 - `src/tools/spaces.ts` - Wallet config, space management, publishing, DAO proposals
 - `src/tools/advanced.ts` - High-level UX tools (build_schema, create_knowledge_graph, get_system_ids)
+- `src/tools/read.ts` - Read/query tools via GraphQL API (search, get entity/space/proposal, list)
+- `src/tools/governance.ts` - DAO governance write tools (vote, propose editor/subspace changes)
+- `src/tools/helpers.ts` - Shared `ok()`/`err()` MCP response helpers
+- `src/utils/wallet.ts` - Shared wallet configuration helpers (ensureWalletConfigured, normalizeAddress)
+- `src/api/client.ts` - Fetch-based GraphQL client + UUID format helpers
 
 ## Key Design Decisions
 
 - **Session-based op accumulation**: All graph operations auto-accumulate ops in a singleton session. `publish_edit` sends all accumulated ops as one edit, then clears the session.
 - **Smart account by default**: Uses Geo's gas-sponsored smart accounts (Pimlico paymaster) so users don't need testnet ETH.
 - **Name-based resolution**: High-level tools like `create_knowledge_graph` resolve references by name, not ID.
+- **Dashless UUID convention**: All IDs returned to MCP consumers use dashless 32-char hex. The GraphQL API uses dashed UUIDs internally.
 
 ## Research Ontology Tool
 
@@ -30,7 +36,7 @@ When running multiple proposals in one MCP server session (e.g., batch deletions
 1. After each `propose_dao_edit` or `publish_edit`, the session clears automatically
 2. Before the next batch, call `clear_session()` then `setup_space()` again
 3. Batch size of ~50 ops per proposal works reliably
-4. `propose_dao_edit` only creates the proposal — it does NOT vote. Vote separately via `publish-to-dao.mjs --vote-pending <proposalId>`
+4. `propose_dao_edit` only creates the proposal — it does NOT vote. Use `vote_on_proposal` to vote separately.
 
 ## SDK Dependencies
 
@@ -38,15 +44,25 @@ When running multiple proposals in one MCP server session (e.g., batch deletions
 - `@geoprotocol/grc-20` - Binary protocol types (Op, Edit)
 - `@modelcontextprotocol/sdk` - MCP server framework
 - `viem` - Ethereum interaction
+- `vitest` - Test framework (dev)
 
 ## Commands
 
 ```bash
-npm run build    # Compile TypeScript
-npm run dev      # Run with tsx (development)
-npm start        # Run compiled version
-npm run typecheck # Type check without emitting
+npm run build      # Compile TypeScript
+npm run dev        # Run with tsx (development)
+npm start          # Run compiled version
+npm run typecheck  # Type check without emitting
+npm test           # Run unit tests
+npm run test:watch # Run tests in watch mode
+npm run test:coverage # Run tests with coverage
 ```
+
+## Environment Variables
+
+- `GEO_PRIVATE_KEY` - Hex private key for wallet (optional, can use configure_wallet at runtime)
+- `GEO_MCP_ALLOWED_PATHS` - Comma-separated additional directories for file read tools
+- `GEO_GRAPHQL_URL` - Override GraphQL endpoint (default: `https://api-testnet.geobrowser.io/graphql`)
 
 ## Network
 

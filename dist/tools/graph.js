@@ -1,5 +1,6 @@
 import { Graph } from '@geoprotocol/geo-sdk';
 import { z } from 'zod';
+import { ok, err } from './helpers.js';
 const DataTypeEnum = z.enum([
     'TEXT',
     'INTEGER',
@@ -48,15 +49,6 @@ const UnsetPropertySchema = z.object({
     property: z.string(),
     language: z.string().optional(),
 });
-function ok(data) {
-    return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
-}
-function err(error) {
-    return {
-        content: [{ type: 'text', text: JSON.stringify({ error: String(error) }) }],
-        isError: true,
-    };
-}
 export function registerGraphTools(server, session) {
     // ── create_property ──────────────────────────────────────────────
     server.tool('create_property', 'Create a property definition in the knowledge graph', {
