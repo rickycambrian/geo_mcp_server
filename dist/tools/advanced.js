@@ -129,6 +129,36 @@ const CreateKnowledgeGraphInputSchema = z.object({
 const MAX_LOCAL_FILE_BYTES = 1_000_000;
 const MAX_LOCAL_FILE_PREVIEW_BYTES = 250_000;
 const DEFAULT_CANONICAL_CLAIM_TYPE_ID = '96f859efa1ca4b229372c86ad58b694b';
+// "Research ontology" IDs for publishing papers/claims using the minimal GeoBrowser schema.
+// Source: https://www.geobrowser.io/space/cc31e40f74231d530f1b5d0fc1cd94d8/6bd605f5269b41a4a5aaab571a77f325
+//
+// Notes:
+// - Paper title and Claim text are stored in the entity `name` (implicit Name property).
+// - Most linking is done through Relation-typed properties using `create_entity.relations`.
+const RESEARCH_ONTOLOGY_IDS = {
+    types: {
+        paper: '1d2f7884e64e005ad897425c9879b0da',
+        claim: DEFAULT_CANONICAL_CLAIM_TYPE_ID,
+        topic: '5ef5a5860f274d8e8f6c59ae5b3e89e2',
+        person: SystemIds.PERSON_TYPE,
+        project: SystemIds.PROJECT_TYPE,
+    },
+    properties: {
+        // Paper properties
+        paperArxivUrl: 'b1417e3a509237b8f32970b6bf6f227e', // Text
+        paperPublicationDate: '3176c284b8653e6cfad174fb1ecd6af0', // Date
+        paperDoi: '0c9ad4f6d0cd852634d7361eb685b881', // Text
+        paperCodeUrl: '766386c7b6b1b77d4adac0ba8b5ba60d', // Text
+        paperSemanticScholarUrl: '044660dd8984d7b46e11dfefa29eb8d4', // Text
+        paperKeyContribution: '875890d85e38caa08e325415d915b628', // Text
+        paperAuthors: '5c8a2a40986a29fe3430775cc2c0fa2e', // Relation
+        paperVenue: 'adb8047237cbc48a9bfe420b4cf8398f', // Relation
+        paperRelatedTopics: '806d52bc27e94c9193c057978b093351', // Relation
+        // Claim properties
+        claimSources: '49c5d5e1679a4dbdbfd33f618f227c94', // Relation
+        claimRelatedTopics: '806d52bc27e94c9193c057978b093351', // Relation (shared)
+    },
+};
 const CANONICAL_RESEARCH_SCHEMA_IDS = {
     types: {
         researchPaper: '5296626122e04c2f8cebc2e0a864e84a',
@@ -209,6 +239,31 @@ const ResearchClaimInputSchema = z.object({
     faithfulnessScore: z.union([z.string(), z.number()]).optional(),
     verificationStatus: z.string().optional(),
 });
+// ── Research ontology publishing (Paper/Claim/Person/Topic/Project) ─────
+const OntologyAuthorInputSchema = z.object({
+    name: z.string().min(1),
+});
+const OntologyProjectInputSchema = z.object({
+    name: z.string().min(1),
+});
+const OntologyPaperInputSchema = z.object({
+    title: z.string().min(1).describe('Paper title (stored as entity.name)'),
+    arxivId: z.string().optional().describe('arXiv ID without prefix (e.g. 2502.10855)'),
+    arxivUrl: z.string().optional().describe('arXiv URL (defaults to https://arxiv.org/abs/<id>)'),
+    publicationDate: z.string().optional().describe('YYYY-MM-DD or ISO datetime (stored as Date)'),
+    doi: z.string().optional(),
+    codeUrl: z.string().optional(),
+    semanticScholarUrl: z.string().optional(),
+    keyContribution: z.string().optional().describe('Short summary of the key contribution'),
+    venue: OntologyProjectInputSchema.optional().describe('Journal/publisher/venue (created as Project entity)'),
+    authors: z.array(OntologyAuthorInputSchema).optional().describe('Paper authors (created as Person entities)'),
+    topics: z.array(z.string()).optional().describe('High-level topics (created as Topic entities)'),
+});
+const OntologyClaimInputSchema = z.object({
+    text: z.string().min(1).describe('Atomic claim text (stored as entity.name; full text also stored in description)'),
+    topics: z.array(z.string()).optional().describe('Topic names this claim belongs to'),
+    sourceQuote: z.string().optional().describe('Optional quote snippet from the paper supporting this claim'),
+});
 function coerceIsoDatetime(input) {
     const trimmed = input.trim();
     if (!trimmed)
@@ -221,11 +276,27 @@ function coerceIsoDatetime(input) {
         return `${trimmed}T00:00:00.000Z`;
     return trimmed;
 }
+function coerceDate(input) {
+    const trimmed = input.trim();
+    if (!trimmed)
+        return trimmed;
+    // Accept YYYY-MM-DD as-is.
+    if (/^\\d{4}-\\d{2}-\\d{2}$/.test(trimmed))
+        return trimmed;
+    // If an ISO datetime is provided, keep the date component.
+    const m = /^\\d{4}-\\d{2}-\\d{2}/.exec(trimmed);
+    if (m)
+        return m[0];
+    return trimmed;
+}
 function shortText(input, max = 120) {
     const cleaned = input.replace(/\\s+/g, ' ').trim();
     if (cleaned.length <= max)
         return cleaned;
     return `${cleaned.slice(0, max - 1)}…`;
+}
+function normalizeLabel(input) {
+    return input.replace(/\\s+/g, ' ').trim();
 }
 export function registerAdvancedTools(server, session) {
     // ── generate_id ──────────────────────────────────────────────────────
@@ -736,6 +807,267 @@ export function registerAdvancedTools(server, session) {
                         type: 'text',
                         text: JSON.stringify({
                             error: `Failed to create research entities: ${error instanceof Error ? error.message : String(error)}`,
+                        }),
+                    },
+                ],
+                isError: true,
+            };
+        }
+    });
+    // ── create_research_ontology_paper_and_claims ───────────────────────
+    server.tool('create_research_ontology_paper_and_claims', 'Create a Paper entity and Claim entities using the GeoBrowser "Research ontology" (Paper/Claim/Person/Topic/Project). This path is designed for Knowledgebook/GeoBrowser UIs that expect claims to be typed as the canonical Claim type.', {
+        paper: OntologyPaperInputSchema.describe('Paper metadata (Paper title stored as entity.name)'),
+        claims: z
+            .array(OntologyClaimInputSchema)
+            .min(1)
+            .max(200)
+            .describe('Atomic claims to publish (Claim text stored as entity.name)'),
+        defaultVenueName: z
+            .string()
+            .optional()
+            .describe('Fallback Project name for the venue/publisher if paper.venue is omitted (default: "arXiv")'),
+        createTopics: z
+            .boolean()
+            .optional()
+            .describe('If true, creates Topic entities for any referenced topics (default true)'),
+        linkPaperToTopics: z
+            .boolean()
+            .optional()
+            .describe('If true, links paper -> topics via Paper.Related topics (default true)'),
+        linkClaimsToPaper: z
+            .boolean()
+            .optional()
+            .describe('If true, links claim -> paper via Claim.Sources (default true)'),
+        linkClaimsToTopics: z
+            .boolean()
+            .optional()
+            .describe('If true, links claim -> topics via Claim.Related topics (default true)'),
+        paperDescription: z
+            .string()
+            .optional()
+            .describe('Optional override for the paper description'),
+        claimDescriptionPrefix: z
+            .string()
+            .optional()
+            .describe('Optional prefix to include in each claim description'),
+    }, async ({ paper, claims, defaultVenueName, createTopics, linkPaperToTopics, linkClaimsToPaper, linkClaimsToTopics, paperDescription, claimDescriptionPrefix, }) => {
+        try {
+            const shouldCreateTopics = createTopics ?? true;
+            const shouldLinkPaperToTopics = linkPaperToTopics ?? true;
+            const shouldLinkClaimsToPaper = linkClaimsToPaper ?? true;
+            const shouldLinkClaimsToTopics = linkClaimsToTopics ?? true;
+            // Normalize/derive arXiv metadata.
+            const arxivId = paper.arxivId?.replace(/^arxiv:/i, '').trim()
+                || (paper.arxivUrl ? (paper.arxivUrl.match(/arxiv\.org\/(?:abs|pdf)\/([^?#]+?)(?:\.pdf)?(?:$|[?#/])/i)?.[1] ?? '').trim() : '')
+                || undefined;
+            const arxivUrl = (paper.arxivUrl ?? '').trim()
+                || (arxivId ? `https://arxiv.org/abs/${arxivId}` : undefined);
+            const venueName = normalizeLabel(paper.venue?.name ?? defaultVenueName ?? (arxivId || arxivUrl ? 'arXiv' : ''));
+            // 1) Create Project (venue/publisher) if we have a name.
+            let venueProjectId = null;
+            if (venueName) {
+                const venueResult = Graph.createEntity({
+                    name: venueName,
+                    description: 'Research venue / publisher (Project).',
+                    types: [RESEARCH_ONTOLOGY_IDS.types.project],
+                });
+                session.addOps(venueResult.ops, {
+                    id: venueResult.id,
+                    type: 'entity',
+                    name: venueName,
+                    opsCount: venueResult.ops.length,
+                });
+                venueProjectId = venueResult.id;
+            }
+            // 2) Create authors (Person entities).
+            const authorIds = [];
+            const authors = paper.authors ?? [];
+            for (const author of authors) {
+                const name = normalizeLabel(author.name);
+                if (!name)
+                    continue;
+                const authorResult = Graph.createEntity({
+                    name,
+                    description: 'Research author (Person).',
+                    types: [RESEARCH_ONTOLOGY_IDS.types.person],
+                });
+                session.addOps(authorResult.ops, {
+                    id: authorResult.id,
+                    type: 'entity',
+                    name,
+                    opsCount: authorResult.ops.length,
+                });
+                authorIds.push(authorResult.id);
+            }
+            // 3) Create topics (Topic entities) as needed.
+            const topicNameToId = new Map();
+            const topicKeyToName = new Map();
+            if (shouldCreateTopics) {
+                for (const raw of paper.topics ?? []) {
+                    const name = normalizeLabel(raw);
+                    if (!name)
+                        continue;
+                    topicKeyToName.set(name.toLowerCase(), name);
+                }
+                for (const claim of claims) {
+                    for (const raw of claim.topics ?? []) {
+                        const name = normalizeLabel(raw);
+                        if (!name)
+                            continue;
+                        topicKeyToName.set(name.toLowerCase(), name);
+                    }
+                }
+                for (const [key, name] of [...topicKeyToName.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+                    const topicResult = Graph.createEntity({
+                        name,
+                        description: 'Research topic (Topic).',
+                        types: [RESEARCH_ONTOLOGY_IDS.types.topic],
+                    });
+                    session.addOps(topicResult.ops, {
+                        id: topicResult.id,
+                        type: 'entity',
+                        name,
+                        opsCount: topicResult.ops.length,
+                    });
+                    topicNameToId.set(key, topicResult.id);
+                }
+            }
+            const paperEntityName = normalizeLabel(paper.title);
+            const derivedDescriptionParts = [];
+            if (arxivId)
+                derivedDescriptionParts.push(`arXiv:${arxivId}`);
+            if (arxivUrl)
+                derivedDescriptionParts.push(arxivUrl);
+            const publicationDate = paper.publicationDate ? coerceDate(paper.publicationDate) : undefined;
+            if (publicationDate)
+                derivedDescriptionParts.push(`Published: ${publicationDate}`);
+            if (venueName)
+                derivedDescriptionParts.push(`Venue: ${venueName}`);
+            const derivedDescription = derivedDescriptionParts.join(' | ') || 'Research paper (Paper).';
+            // 4) Create Paper.
+            const paperValues = [];
+            if (arxivUrl) {
+                paperValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.paperArxivUrl, 'text', arxivUrl));
+            }
+            if (publicationDate) {
+                paperValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.paperPublicationDate, 'date', publicationDate));
+            }
+            if (paper.doi) {
+                paperValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.paperDoi, 'text', paper.doi));
+            }
+            if (paper.codeUrl) {
+                paperValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.paperCodeUrl, 'text', paper.codeUrl));
+            }
+            if (paper.semanticScholarUrl) {
+                paperValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.paperSemanticScholarUrl, 'text', paper.semanticScholarUrl));
+            }
+            if (paper.keyContribution) {
+                paperValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.paperKeyContribution, 'text', paper.keyContribution));
+            }
+            const paperRelations = {};
+            if (authorIds.length > 0) {
+                paperRelations[RESEARCH_ONTOLOGY_IDS.properties.paperAuthors] = authorIds.map((id) => ({ toEntity: id }));
+            }
+            if (venueProjectId) {
+                paperRelations[RESEARCH_ONTOLOGY_IDS.properties.paperVenue] = { toEntity: venueProjectId };
+            }
+            if (shouldLinkPaperToTopics && topicNameToId.size > 0) {
+                paperRelations[RESEARCH_ONTOLOGY_IDS.properties.paperRelatedTopics] = [...topicNameToId.values()].map((id) => ({ toEntity: id }));
+            }
+            const paperResult = Graph.createEntity({
+                name: paperEntityName,
+                description: paperDescription ?? derivedDescription,
+                types: [RESEARCH_ONTOLOGY_IDS.types.paper],
+                values: paperValues.length > 0 ? paperValues : undefined,
+                relations: Object.keys(paperRelations).length > 0 ? paperRelations : undefined,
+            });
+            session.addOps(paperResult.ops, {
+                id: paperResult.id,
+                type: 'entity',
+                name: paperEntityName,
+                opsCount: paperResult.ops.length,
+            });
+            // 5) Create Claim entities.
+            const claimIds = [];
+            let opsAdded = paperResult.ops.length;
+            for (const claim of claims) {
+                const claimText = normalizeLabel(claim.text);
+                if (!claimText)
+                    continue;
+                const claimName = shortText(claimText, 240);
+                const topicIdsForClaim = [];
+                for (const raw of claim.topics ?? []) {
+                    const key = normalizeLabel(raw).toLowerCase();
+                    const id = topicNameToId.get(key);
+                    if (id)
+                        topicIdsForClaim.push(id);
+                }
+                const descParts = [];
+                if (claimDescriptionPrefix)
+                    descParts.push(claimDescriptionPrefix.trim());
+                descParts.push(claimText);
+                if (claim.sourceQuote)
+                    descParts.push(`Quote: ${shortText(claim.sourceQuote, 800)}`);
+                if (topicIdsForClaim.length > 0) {
+                    const names = (claim.topics ?? []).map(normalizeLabel).filter(Boolean);
+                    if (names.length > 0)
+                        descParts.push(`Topics: ${names.join(', ')}`);
+                }
+                descParts.push(`Source: ${paperEntityName}${arxivId ? ` (arXiv:${arxivId})` : ''}`);
+                const claimDescription = descParts.filter(Boolean).join('\n\n');
+                const claimRelations = {};
+                if (shouldLinkClaimsToPaper) {
+                    claimRelations[RESEARCH_ONTOLOGY_IDS.properties.claimSources] = { toEntity: paperResult.id };
+                }
+                if (shouldLinkClaimsToTopics && topicIdsForClaim.length > 0) {
+                    claimRelations[RESEARCH_ONTOLOGY_IDS.properties.claimRelatedTopics] = topicIdsForClaim.map((id) => ({ toEntity: id }));
+                }
+                const claimResult = Graph.createEntity({
+                    name: claimName,
+                    description: claimDescription,
+                    types: [RESEARCH_ONTOLOGY_IDS.types.claim],
+                    relations: Object.keys(claimRelations).length > 0 ? claimRelations : undefined,
+                });
+                session.addOps(claimResult.ops, {
+                    id: claimResult.id,
+                    type: 'entity',
+                    name: claimName,
+                    opsCount: claimResult.ops.length,
+                });
+                claimIds.push(claimResult.id);
+                opsAdded += claimResult.ops.length;
+            }
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: JSON.stringify({
+                            paper: {
+                                id: paperResult.id,
+                                name: paperEntityName,
+                                arxivId: arxivId ?? null,
+                                arxivUrl: arxivUrl ?? null,
+                            },
+                            venueProject: venueProjectId ? { id: venueProjectId, name: venueName } : null,
+                            authors: authorIds,
+                            topics: [...topicNameToId.entries()].map(([key, id]) => ({ key, id, name: topicKeyToName.get(key) ?? null })),
+                            claims: {
+                                count: claimIds.length,
+                                ids: claimIds,
+                            },
+                            opsAdded,
+                        }, null, 2),
+                    },
+                ],
+            };
+        }
+        catch (error) {
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: JSON.stringify({
+                            error: `Failed to create research ontology entities: ${error instanceof Error ? error.message : String(error)}`,
                         }),
                     },
                 ],
