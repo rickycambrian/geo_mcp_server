@@ -54,7 +54,17 @@ const GraphSchemaInputSchema = z.object({
 
 const GraphEntityInputSchema = z.object({
   name: z.string().describe('Entity name'),
-  typeName: z.string().describe('Name of the type (must match a type name from schema)'),
+  typeName: z
+    .string()
+    .describe(
+      'Primary type name or type ID. Prefer a type name from schema, but you may pass a type ID to reference an existing type.',
+    ),
+  typeNames: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Additional type names or type IDs to assign (multi-typing). Each entry may be a type name from schema or an existing type ID.',
+    ),
   values: z
     .array(
       z.object({
@@ -641,7 +651,13 @@ function createKnowledgeGraph(
   // 4. Create all entities with their values
   if (entities) {
     for (const entity of entities) {
-      const typeId = typeMap.get(entity.typeName) ?? entity.typeName;
+      const typeIds = [
+        entity.typeName,
+        ...(entity.typeNames ?? []),
+      ]
+        .map((t) => typeMap.get(t) ?? t)
+        .filter((t): t is string => typeof t === 'string' && t.length > 0);
+      const uniqueTypeIds = [...new Set(typeIds)];
       const values = entity.values?.map((v) => {
         const propertyId = propertyMap.get(v.propertyName) ?? v.propertyName;
         return buildTypedValue(propertyId, v.type, v.value);
@@ -649,7 +665,7 @@ function createKnowledgeGraph(
 
       const result = Graph.createEntity({
         name: entity.name,
-        types: [typeId],
+        types: uniqueTypeIds,
         values,
       });
       entityMap.set(entity.name, result.id);
