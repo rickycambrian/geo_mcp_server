@@ -68,6 +68,7 @@ const CreateKnowledgeGraphInputSchema = z.object({
 });
 const MAX_LOCAL_FILE_BYTES = 1_000_000;
 const MAX_LOCAL_FILE_PREVIEW_BYTES = 250_000;
+const DEFAULT_CANONICAL_CLAIM_TYPE_ID = '96f859efa1ca4b229372c86ad58b694b';
 export function registerAdvancedTools(server, session) {
     // ── generate_id ──────────────────────────────────────────────────────
     server.tool('generate_id', 'Generate one or more unique Geo knowledge graph IDs (dashless UUID v4)', {
@@ -530,6 +531,8 @@ function createKnowledgeGraph(session, { schema, entities, relations }) {
     }
     // 4. Create all entities with their values
     if (entities) {
+        const canonicalClaimTypeId = (process.env.GEO_CANONICAL_CLAIM_TYPE_ID ?? '').trim() || DEFAULT_CANONICAL_CLAIM_TYPE_ID;
+        const researchClaimTypeId = typeMap.get('Research Claim');
         for (const entity of entities) {
             const typeIds = [
                 entity.typeName,
@@ -538,6 +541,11 @@ function createKnowledgeGraph(session, { schema, entities, relations }) {
                 .map((t) => typeMap.get(t) ?? t)
                 .filter((t) => typeof t === 'string' && t.length > 0);
             const uniqueTypeIds = [...new Set(typeIds)];
+            // Ensure Research Claim entities show up under the standard GeoBrowser "Claim" views.
+            // This makes the system more robust when clients forget to add the canonical Claim type.
+            if (researchClaimTypeId && uniqueTypeIds.includes(researchClaimTypeId) && !uniqueTypeIds.includes(canonicalClaimTypeId)) {
+                uniqueTypeIds.push(canonicalClaimTypeId);
+            }
             const values = entity.values?.map((v) => {
                 const propertyId = propertyMap.get(v.propertyName) ?? v.propertyName;
                 return buildTypedValue(propertyId, v.type, v.value);
