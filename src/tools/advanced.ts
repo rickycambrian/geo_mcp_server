@@ -37,6 +37,30 @@ const GraphValueTypeEnum = z.enum([
   'point',
 ]);
 
+const GraphTypeInputSchema = z
+  .object({
+    name: z.string().describe('Type name'),
+    // Canonical field name used by the server and docs.
+    propertyNames: z.array(z.string()).optional().describe('Property names (or property IDs) to attach to this type'),
+    // Common LLM slip: uses `properties` instead of `propertyNames`.
+    properties: z.array(z.string()).optional().describe('Alias for propertyNames'),
+  })
+  .superRefine((t, ctx) => {
+    const hasPropertyNames = Array.isArray(t.propertyNames) && t.propertyNames.length > 0;
+    const hasProperties = Array.isArray(t.properties) && t.properties.length > 0;
+    if (!hasPropertyNames && !hasProperties) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Either propertyNames or properties must be provided',
+        path: ['propertyNames'],
+      });
+    }
+  })
+  .transform((t) => ({
+    name: t.name,
+    propertyNames: t.propertyNames ?? t.properties ?? [],
+  }));
+
 const GraphSchemaInputSchema = z.object({
   properties: z.array(
     z.object({
@@ -44,13 +68,31 @@ const GraphSchemaInputSchema = z.object({
       dataType: GraphDataTypeEnum.describe('Data type'),
     }),
   ),
-  types: z.array(
-    z.object({
-      name: z.string().describe('Type name'),
-      propertyNames: z.array(z.string()).describe('Property names to attach to this type'),
-    }),
-  ),
+  types: z.array(GraphTypeInputSchema),
 });
+
+const GraphEntityValueInputSchema = z
+  .object({
+    propertyName: z.string().optional().describe('Property name (must match a property name from schema)'),
+    // Common LLM slip: uses `property` from the lower-level Graph.createEntity API.
+    property: z.string().optional().describe('Alias for propertyName'),
+    type: GraphValueTypeEnum.describe('Value type'),
+    value: z.union([z.string(), z.number(), z.boolean()]).describe('The value'),
+  })
+  .superRefine((v, ctx) => {
+    if (!v.propertyName && !v.property) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Either propertyName or property must be provided',
+        path: ['propertyName'],
+      });
+    }
+  })
+  .transform((v) => ({
+    propertyName: v.propertyName ?? v.property ?? '',
+    type: v.type,
+    value: v.value,
+  }));
 
 const GraphEntityInputSchema = z.object({
   name: z.string().describe('Entity name'),
@@ -68,11 +110,7 @@ const GraphEntityInputSchema = z.object({
     ),
   values: z
     .array(
-      z.object({
-        propertyName: z.string().describe('Property name (must match a property name from schema)'),
-        type: GraphValueTypeEnum.describe('Value type'),
-        value: z.union([z.string(), z.number(), z.boolean()]).describe('The value'),
-      }),
+      GraphEntityValueInputSchema,
     )
     .optional()
     .describe('Property values for this entity'),
@@ -164,11 +202,33 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
         .describe('Properties to create'),
       types: z
         .array(
-          z.object({
-            name: z.string().describe('Type name'),
-            propertyNames: z.array(z.string()).describe('Names of properties to attach (must match property names above or be existing property IDs)'),
-            description: z.string().optional().describe('Optional description'),
-          }),
+          z
+            .object({
+              name: z.string().describe('Type name'),
+              // Canonical field used by docs.
+              propertyNames: z
+                .array(z.string())
+                .optional()
+                .describe('Names of properties to attach (must match property names above or be existing property IDs)'),
+              // Common LLM slip: uses `properties` instead of `propertyNames`.
+              properties: z.array(z.string()).optional().describe('Alias for propertyNames'),
+              description: z.string().optional().describe('Optional description'),
+            })
+            .superRefine((t, ctx) => {
+              const hasPropertyNames = Array.isArray(t.propertyNames) && t.propertyNames.length > 0;
+              const hasProperties = Array.isArray(t.properties) && t.properties.length > 0;
+              if (!hasPropertyNames && !hasProperties) {
+                ctx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  message: 'Either propertyNames or properties must be provided',
+                  path: ['propertyNames'],
+                });
+              }
+            })
+            .transform((t) => ({
+              ...t,
+              propertyNames: t.propertyNames ?? t.properties ?? [],
+            })),
         )
         .describe('Types to create'),
     },
