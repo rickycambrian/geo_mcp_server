@@ -14,6 +14,10 @@ vi.mock('@geoprotocol/geo-sdk', () => ({
   Account: {
     make: vi.fn(() => ({ accountId: 'account1', ops: [{ type: 99 }] })),
   },
+  Graph: {
+    createEntity: vi.fn(() => ({ id: 'workflow-created', ops: [{ type: 1 }] })),
+    updateEntity: vi.fn(() => ({ id: 'workflow-updated', ops: [{ type: 2 }] })),
+  },
 }));
 
 vi.mock('@geoprotocol/geo-sdk/abis', () => ({
@@ -41,7 +45,7 @@ vi.mock('../utils/wallet.js', () => ({
   normalizeBytes16Hex: vi.fn((value: string) => value.toLowerCase() as `0x${string}`),
 }));
 
-import { personalSpace, daoSpace, Account } from '@geoprotocol/geo-sdk';
+import { personalSpace, daoSpace, Account, Graph } from '@geoprotocol/geo-sdk';
 import { ensureWalletConfigured as mockEnsureWallet } from '../utils/wallet.js';
 
 function captureTools() {
@@ -250,6 +254,85 @@ describe('space tools', () => {
         votingMode: 'FAST',
       });
       expect(result.isError).toBe(true);
+    });
+  });
+
+  describe('upsert_canvas_workflow', () => {
+    it('publishes private workflow upsert', async () => {
+      (mockEnsureWallet as any).mockResolvedValue({ ok: true, address: '0xaddr' });
+      mockSession.spaceId = '0x' + 'ab'.repeat(16);
+      (Graph.createEntity as any).mockReturnValue({ id: 'workflow-created', ops: [{ type: 1 }] });
+      (personalSpace.publishEdit as any).mockResolvedValue({
+        editId: 'edit-private',
+        cid: 'cid-private',
+        to: '0xto',
+        calldata: '0xdata',
+      });
+
+      const tools = await setupTools();
+      const result = await tools.upsert_canvas_workflow.handler({
+        name: 'Workflow A',
+        description: 'private workflow',
+        nodes: [{ id: 'n1', type: 'text-input', data: {} }],
+        connections: [],
+        visibility: 'private',
+      });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.workflowId).toBe('workflow-created');
+      expect(parsed.publishMode).toBe('published');
+      expect(parsed.editId).toBe('edit-private');
+      expect(parsed.txHash).toBe('0xtxhash');
+      expect(Graph.createEntity).toHaveBeenCalled();
+      expect(personalSpace.publishEdit).toHaveBeenCalledOnce();
+    });
+
+    it('proposes public workflow upsert via DAO', async () => {
+      (mockEnsureWallet as any).mockResolvedValue({ ok: true, address: '0xaddr' });
+      mockSession.spaceId = '0x' + 'ab'.repeat(16);
+      (Graph.updateEntity as any).mockReturnValue({ id: 'workflow-updated', ops: [{ type: 2 }] });
+      (daoSpace.proposeEdit as any).mockResolvedValue({
+        editId: 'edit-public',
+        cid: 'cid-public',
+        proposalId: 'proposal-1',
+        to: '0xto',
+        calldata: '0xdata',
+      });
+
+      const tools = await setupTools();
+      const result = await tools.upsert_canvas_workflow.handler({
+        workflowId: 'workflow-updated',
+        name: 'Workflow B',
+        description: 'public workflow',
+        nodes: [{ id: 'n1', type: 'text-input', data: {} }],
+        connections: [],
+        visibility: 'public',
+        daoSpaceAddress: '0x' + 'ab'.repeat(20),
+        daoSpaceId: '0x' + 'cd'.repeat(16),
+        votingMode: 'FAST',
+      });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.workflowId).toBe('workflow-updated');
+      expect(parsed.publishMode).toBe('proposal');
+      expect(parsed.proposalId).toBe('proposal-1');
+      expect(parsed.txHash).toBe('0xtxhash');
+      expect(Graph.updateEntity).toHaveBeenCalled();
+      expect(daoSpace.proposeEdit).toHaveBeenCalledOnce();
+    });
+
+    it('returns error when public upsert is missing DAO fields', async () => {
+      (mockEnsureWallet as any).mockResolvedValue({ ok: true, address: '0xaddr' });
+      mockSession.spaceId = '0x' + 'ab'.repeat(16);
+
+      const tools = await setupTools();
+      const result = await tools.upsert_canvas_workflow.handler({
+        name: 'Workflow C',
+        nodes: [{ id: 'n1', type: 'text-input', data: {} }],
+        connections: [],
+        visibility: 'public',
+      });
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.error).toContain('requires daoSpaceAddress, daoSpaceId, and votingMode');
     });
   });
 
