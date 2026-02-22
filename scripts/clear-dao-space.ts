@@ -215,6 +215,27 @@ async function getTotalCounts(spaceId: string): Promise<{ entities: number; rela
   return { entities: ec.totalCount, relations: rc.totalCount };
 }
 
+async function findExistingAccountId(spaceId: string): Promise<string | null> {
+  try {
+    const data = await gqlFetch(
+      `query($spaceId: UUID!) {
+        entitiesConnection(first: 10, spaceId: $spaceId, orderBy: UPDATED_AT_DESC) {
+          nodes { id name typeIds }
+        }
+      }`,
+      { spaceId },
+    );
+    const conn = data.entitiesConnection as { nodes: EntityNode[] };
+    for (const node of conn.nodes) {
+      if (node.typeIds.includes(ACCOUNT_TYPE_ID)) return node.id;
+      if (node.name && /^0x[a-fA-F0-9]{40}$/i.test(node.name)) return node.id;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 async function listAllEntities(spaceId: string, limit?: number | null): Promise<EntityNode[]> {
   const out: EntityNode[] = [];
   let after: string | null = null;
@@ -228,7 +249,7 @@ async function listAllEntities(spaceId: string, limit?: number | null): Promise<
     process.stdout.write(`\r     fetching page ${page} (${out.length} so far)...`);
     const data = await gqlFetch(
       `query($spaceId: UUID, $first: Int!, $after: Cursor) {
-        entitiesConnection(first: $first, after: $after, spaceId: $spaceId, orderBy: UPDATED_AT_DESC) {
+        entitiesConnection(first: $first, after: $after, spaceId: $spaceId, orderBy: CREATED_AT_ASC) {
           pageInfo { hasNextPage endCursor }
           nodes { id name typeIds }
         }
@@ -517,9 +538,15 @@ async function runDeletionPass(opts: {
   // 1) Query entities
   console.log('\n1) Querying entities in DAO space...');
   let entities = await listAllEntities(DAO_SPACE_ID, entityLimit);
-  const accountEntities = entities.filter((e) => e.typeIds.includes(ACCOUNT_TYPE_ID));
-  entities = entities.filter((e) => !e.typeIds.includes(ACCOUNT_TYPE_ID));
-  console.log(`   Found ${entities.length} entities (skipped ${accountEntities.length} Account entities)`);
+  const beforeFilter = entities.length;
+  entities = entities.filter((e) => {
+    // Skip entities with Account type
+    if (e.typeIds.includes(ACCOUNT_TYPE_ID)) return false;
+    // Skip entities named after any Ethereum address (0x + 40 hex chars)
+    if (e.name && /^0x[a-fA-F0-9]{40}$/i.test(e.name)) return false;
+    return true;
+  });
+  console.log(`   Found ${entities.length} entities (filtered out ${beforeFilter - entities.length} Account/address entities)`);
 
   if (entities.length > 0) {
     const sample = entities.slice(0, 5).map((e) => `  - ${e.id} :: ${e.name ?? '(unnamed)'}`);
@@ -592,8 +619,20 @@ async function runDeletionPass(opts: {
   // 4) Propose + vote + execute each batch
   console.log('\n4) Proposing deletion batches to DAO (propose + vote + execute)...');
 
-  // Create account ONCE — only include accountOps in the first batch
-  const { accountId, ops: accountOps } = Account.make(smartAccount.account.address);
+  // Try to reuse an existing Account entity instead of creating a new one every run
+  let accountId: string;
+  let accountOps: unknown[] = [];
+  const existingAccountId = await findExistingAccountId(DAO_SPACE_ID);
+  if (existingAccountId) {
+    accountId = existingAccountId;
+    accountOps = []; // No ops needed — account already exists
+    console.log(`   Reusing existing Account entity: ${existingAccountId}`);
+  } else {
+    const result = Account.make(smartAccount.account.address);
+    accountId = result.accountId;
+    accountOps = result.ops;
+    console.log(`   Creating new Account entity: ${accountId}`);
+  }
 
   const overallStart = Date.now();
   const batchTimes: number[] = [];
@@ -618,7 +657,7 @@ async function runDeletionPass(opts: {
         }
       }
 
-      const allOps = i === 0 ? [...accountOps, ...ops] : ops;
+      const allOps = i === 0 && accountOps.length > 0 ? [...accountOps, ...ops] : ops;
 
       const { proposalId, to, calldata } = await daoSpace.proposeEdit({
         name: batchName,
@@ -757,8 +796,19 @@ async function runRename(smartAccount: SmartAccount, publicClient: PublicClient)
   console.log(`\nRenaming space entity to "${RENAME_TO}"...`);
 
   const renameOps = Graph.updateEntity({ id: DAO_SPACE_ID, name: RENAME_TO }).ops;
-  const { accountId, ops: accountOps } = Account.make(smartAccount.account.address);
-  const allOps = [...accountOps, ...renameOps];
+
+  // Reuse existing Account entity if available
+  let accountId: string;
+  let renameAccountOps: unknown[] = [];
+  const existingAccountId = await findExistingAccountId(DAO_SPACE_ID);
+  if (existingAccountId) {
+    accountId = existingAccountId;
+  } else {
+    const result = Account.make(smartAccount.account.address);
+    accountId = result.accountId;
+    renameAccountOps = result.ops;
+  }
+  const allOps = [...renameAccountOps, ...renameOps];
 
   const { proposalId, to, calldata } = await daoSpace.proposeEdit({
     name: `Rename space to "${RENAME_TO}"`,
