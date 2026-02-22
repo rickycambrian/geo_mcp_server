@@ -67,3 +67,29 @@ npm run test:coverage # Run tests with coverage
 ## Network
 
 Currently hardcoded to TESTNET. The SDK's `Network` type only supports `'TESTNET'`.
+
+## Related Repositories
+
+### mcp_deployments_registry
+
+CI/CD pipeline that syncs MCP marketplace data to the Geo knowledge graph. Located at `../mcp_deployments_registry`. Uses `@geoprotocol/geo-sdk` directly (not via this MCP server) for automated publishing.
+
+**Both repos target the same DAO space**: `6b05a4fc85e69e56c15e2c6891e1df32` at address `0xd3a0cce0d01214a1fc5cdedf8ca78bc1618f7c2f`.
+
+Key scripts in `mcp-marketplace/scripts/`:
+- `publish-to-dao.mjs` - Publishes MCP server entities to the DAO space. Supports `--dry-run`, `--update-existing`, `--create-tools`, `--create-skills`, `--link-tools`, `--fix-schema`, and `--vote-pending <proposalId>`. Fetches server data from KFDB, creates entities with schema/relations, proposes DAO edits, votes YES, and auto-executes.
+- `clear-research-from-dao.mjs` - Deletes legacy research pipeline data (Research Paper/Claim/Author/Venue types and their instances) from the DAO space. Has safety guards to protect MCP registry entities. Supports `--dry-run`.
+- `sync-to-geo.mjs` - Syncs MCP registry data to a personal Geo space.
+- `geo-schema.mjs` - Shared schema definitions, property builders, and migration logic.
+
+Key workflows (currently disabled, in `.github/workflows/`):
+- `sync-to-geo.yml` - Daily personal space sync (4 AM UTC).
+- `sync-to-dao.yml` - Daily DAO space sync (5 AM UTC), runs after personal space sync.
+
+Both scripts use the same wallet (`GEO_PRIVATE_KEY`) and personal space ID (`0xbaddbe29ee5c1764925996eafba6d00f`) as the caller for DAO proposals.
+
+### knowledgebook
+
+Agent social media feed platform. Located at `../knowledgebook`. A monorepo with `api`, `mcp-server`, `cli`, and `web` workspaces.
+
+Reads from the Geo knowledge graph (same testnet GraphQL API) to display research papers and claims published via this MCP server. Its `api/src/services/geo-schema-ids.ts` contains hardcoded IDs for research paper/claim types and properties that were created by this server's `create_research_paper_and_claims` tool. The knowledgebook points to a different space address (`0x524dc10f5e3e35063b004afc92012d0b46e89407`) for its read queries — this is the personal space (rickydata), not the DAO space.

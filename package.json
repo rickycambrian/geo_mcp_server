@@ -38,7 +38,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "clear-dao": "tsx scripts/clear-dao-space.ts"
   },
   "dependencies": {
     "@geoprotocol/geo-sdk": "^0.9.0",

@@ -5,6 +5,7 @@ import { registerSpaceTools } from './tools/spaces.js';
 import { registerAdvancedTools } from './tools/advanced.js';
 import { registerReadTools } from './tools/read.js';
 import { registerGovernanceTools } from './tools/governance.js';
+import { registerWorkspaceTools } from './tools/workspace.js';
 
 export function createServer(): McpServer {
   const server = new McpServer({
@@ -16,6 +17,7 @@ export function createServer(): McpServer {
   registerSpaceTools(server, session);
   registerAdvancedTools(server, session);
   registerReadTools(server);
+  registerWorkspaceTools(server, session);
   registerGovernanceTools(server, session);
 
   return server;

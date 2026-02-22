@@ -5,6 +5,7 @@ import { registerSpaceTools } from './tools/spaces.js';
 import { registerAdvancedTools } from './tools/advanced.js';
 import { registerReadTools } from './tools/read.js';
 import { registerGovernanceTools } from './tools/governance.js';
+import { registerWorkspaceTools } from './tools/workspace.js';
 export function createServer() {
     const server = new McpServer({
         name: 'geo-mcp-server',
@@ -14,6 +15,7 @@ export function createServer() {
     registerSpaceTools(server, session);
     registerAdvancedTools(server, session);
     registerReadTools(server);
+    registerWorkspaceTools(server, session);
     registerGovernanceTools(server, session);
     return server;
 }
