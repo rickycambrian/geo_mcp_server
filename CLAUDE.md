@@ -30,6 +30,37 @@ MCP server that provides full access to the Geo protocol SDK for knowledge graph
 
 **CRITICAL**: Always use this tool for research publishing instead of `build_schema` or `create_knowledge_graph` — those create local types that don't match the canonical schema.
 
+## Three-Tier Geo Data Model
+
+Understanding when to use each publishing target is critical:
+
+| Tier | Method | When to Use | Visible Where |
+|------|--------|-------------|---------------|
+| **DAO Space** (ALWAYS for agents) | `propose_dao_edit` | All production publishing from marketplace agents | GeoBrowser DAO page, Knowledgebook, shared views |
+| **Private Personal Space** | `publish_edit` | Private notes/tasks in KF_serverless only | Only the wallet owner's personal space |
+| **Public Personal Space** | `publish_edit` | **DO NOT USE** — no current use case | Personal space page only, not shared |
+
+**CRITICAL for agent marketplace agents**: ALWAYS use `propose_dao_edit` to publish to DAO space `6b05a4fc85e69e56c15e2c6891e1df32`. Never call `publish_edit` before `propose_dao_edit` — it sends data to a personal space AND clears the session, leaving nothing for the DAO proposal.
+
+The geo-mcp-server itself supports both `publish_edit` (personal) and `propose_dao_edit` (DAO) since it's a general-purpose tool. But all agents on the marketplace MUST use the DAO space.
+
+### Golden Standard: Verified E2E Agent Flow
+
+This exact tool call sequence was verified end-to-end on 2026-02-23 (see `../mcp_deployments_registry/mcp-gateway-sdk/test-claimify-e2e.mjs`):
+
+```
+1. configure_wallet({})  +  download_paper(...)       [parallel]
+2. setup_space()         +  read_paper(...)            [parallel]
+3. create_research_ontology_paper_and_claims({...})    [accumulates ops]
+4. propose_dao_edit({                                  [creates DAO proposal]
+     name: "Add Claimify paper and claims",
+     daoSpaceAddress: "0xd3a0cce0d01214a1fc5cdedf8ca78bc1618f7c2f",
+     daoSpaceId: "6b05a4fc85e69e56c15e2c6891e1df32"
+   })
+```
+
+Result: 9 tool calls, ~95s, $0.055 (haiku model). Do NOT call `publish_edit` in this flow.
+
 ## Batch Operations & Session Management
 
 When running multiple proposals in one MCP server session (e.g., batch deletions):

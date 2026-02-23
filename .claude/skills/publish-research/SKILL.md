@@ -27,8 +27,11 @@ Publish a research paper and its extracted claims to the Geo knowledge graph usi
    - Each claim needs `text` (required)
    - Optional: `sourceQuote`, `topics`
 
-6. **Publish the edit**:
-   - Call `publish_edit` to send accumulated ops to the personal space
+6. **Propose to DAO** (default, always use):
+   - Call `propose_dao_edit` with `daoSpaceAddress`, `daoSpaceId`, and `name`
+   - Do NOT call `publish_edit` before `propose_dao_edit` — it clears the session
+   - DAO space ID: `6b05a4fc85e69e56c15e2c6891e1df32`
+   - DAO space address: `0xd3a0cce0d01214a1fc5cdedf8ca78bc1618f7c2f`
 
 ## Canonical Research Ontology Type IDs
 
@@ -74,13 +77,25 @@ These are the production type IDs used by GeoBrowser and Knowledgebook. The `cre
 - Supporting quotes go in Claim.Quotes property or entity description
 - All claims MUST be typed with the canonical Claim type `96f859efa1ca4b229372c86ad58b694b`
 
-## For DAO Publishing
+## Publishing Target: DAO Space (ALWAYS)
 
-To publish to the DAO space instead of personal space:
-- Use `propose_dao_edit` instead of `publish_edit`
-- Then `vote_on_proposal` to vote YES on the proposal
-- DAO space ID: `6b05a4fc85e69e56c15e2c6891e1df32`
-- DAO space address: `0xd3a0cce0d01214a1fc5cdedf8ca78bc1618f7c2f`
+**ALWAYS use `propose_dao_edit`** to publish research to the DAO space. This is the only correct target for research publishing. Do NOT use `publish_edit` — it sends data to a personal space (wrong destination) and clears the session.
+
+```
+configure_wallet({}) → setup_space() → create_research_ontology_paper_and_claims({...}) → propose_dao_edit({
+  name: "Add paper + claims: <title>",
+  daoSpaceAddress: "0xd3a0cce0d01214a1fc5cdedf8ca78bc1618f7c2f",
+  daoSpaceId: "6b05a4fc85e69e56c15e2c6891e1df32"
+})
+```
+
+After proposing, vote on the governance page: https://www.geobrowser.io/space/6b05a4fc85e69e56c15e2c6891e1df32/governance
+
+## Personal Space Publishing (Dev Testing Only)
+
+For development testing only — NOT for production:
+- Use `publish_edit` instead of `propose_dao_edit`
+- Data will NOT appear in the DAO space, Knowledgebook, or shared views
 
 ## Related
 
