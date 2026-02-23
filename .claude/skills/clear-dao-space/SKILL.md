@@ -60,6 +60,8 @@ npm run clear-dao -- --all --yes --rename "New Space Name"
 | `--yes` / `-y` | Skip interactive confirmation prompt |
 | `--batch-size N` | Ops per DAO proposal (default: 5000). Each batch = one proposal + vote + execute |
 | `--rename "Name"` | Rename the space entity after clearing |
+| `--type <typeId>` | Only delete entities matching this type ID (targeted deletion) |
+| `--exclude-type <typeId>` | Skip entities of this type |
 
 ## How It Works
 
@@ -116,8 +118,54 @@ Self-voting uses the `SpaceRegistryAbi.enter()` pattern with `PROPOSAL_VOTED_ACT
 - GraphQL: `testnet-api.geobrowser.io/graphql` (supports `spaceId` arg on `entitiesConnection`)
 - Progress log: `backups/deletion-progress.jsonl`
 
+## Targeted Deletion Examples
+
+Delete only Claim entities from the DAO space:
+```bash
+npm run clear-dao -- --dry-run --type 96f859efa1ca4b229372c86ad58b694b
+npm run clear-dao -- --type 96f859efa1ca4b229372c86ad58b694b --all --yes
+```
+
+Delete only Paper entities:
+```bash
+npm run clear-dao -- --type 1d2f7884e64e005ad897425c9879b0da --all --yes
+```
+
+Delete everything except Person entities:
+```bash
+npm run clear-dao -- --exclude-type 7ed45f2bc48b419e8e4664d5ff680b0d --all --yes
+```
+
+## WARNING: Full DAO Space Clears
+
+**Do NOT do full DAO space clears going forward.** The DAO space is the production shared space used by all marketplace agents. Use targeted deletion (`--type`) to remove specific entity types instead.
+
+For clearing stale personal space data, use `clear-personal-space.ts` instead:
+```bash
+npm run clear-personal -- --dry-run
+npm run clear-personal -- --all --yes --batch-size 5000
+```
+
+## Clear Personal Space
+
+For clearing the rickydata personal space (`0xbaddbe29ee5c1764925996eafba6d00f`), use the companion script:
+
+```bash
+npm run clear-personal -- --dry-run
+npm run clear-personal -- --total-limit 100 --yes
+npm run clear-personal -- --all --yes --batch-size 5000
+```
+
+Key differences from the DAO script:
+- Uses `personalSpace.publishEdit()` directly — no governance overhead
+- Much faster (no proposal/vote/execute per batch)
+- Supports `--type` and `--exclude-type` for targeted deletion
+- Progress logged to `backups/personal-deletion-progress.jsonl`
+
 ## When to Use
 
-- Before re-publishing fresh data to the DAO space
-- To clean up after failed or partial syncs
-- When resetting the space for testing
+| Script | When |
+|--------|------|
+| `clear-personal-space.ts` | Clearing stale personal space data (old syncs, test data) |
+| `clear-dao-space.ts --type <id>` | Targeted removal of specific entity types from DAO |
+| `clear-dao-space.ts --all` | **Last resort only** — full DAO wipe (use with extreme caution) |

@@ -1,28 +1,25 @@
 #!/usr/bin/env npx tsx
 
 /**
- * ⚠️  WARNING: This script targets the PRODUCTION DAO space.
- * Use targeted operations (--type / --exclude-type) for selective cleanup.
- * For full space clears, prefer clear-personal-space.ts instead.
- * Only do full DAO clears if you are certain you want to wipe all shared data.
+ * Clear ALL entities and relations from the rickydata personal Geo space.
  *
- * Clear entities and relations from a Geo DAO space.
+ * Unlike clear-dao-space.ts, this uses personalSpace.publishEdit() directly —
+ * no governance overhead (no proposals, votes, or execution steps).
  *
  * Usage:
- *   npx tsx scripts/clear-dao-space.ts --dry-run
- *   npx tsx scripts/clear-dao-space.ts --dry-run --limit 100
- *   npx tsx scripts/clear-dao-space.ts --dry-run --type 96f859efa1ca4b229372c86ad58b694b
- *   npx tsx scripts/clear-dao-space.ts --total-limit 10000
- *   npx tsx scripts/clear-dao-space.ts --all --yes          # fire-and-forget: delete everything
- *   npx tsx scripts/clear-dao-space.ts --rename "My New Space Name"
+ *   npx tsx scripts/clear-personal-space.ts --dry-run
+ *   npx tsx scripts/clear-personal-space.ts --dry-run --limit 100
+ *   npx tsx scripts/clear-personal-space.ts --total-limit 100 --yes
+ *   npx tsx scripts/clear-personal-space.ts --all --yes --batch-size 5000
+ *   npx tsx scripts/clear-personal-space.ts --rename "My New Space Name"
  *
  * Flags:
  *   --dry-run          Preview without on-chain actions
  *   --limit N          Limit per-type (N entities + N relations)
  *   --total-limit N    Limit combined total (relations first, then entities)
- *   --all              Loop until space is empty (processes in 10K chunks)
+ *   --all              Loop until space is empty (processes in 50K chunks)
  *   --yes / -y         Skip confirmation prompt
- *   --batch-size N     Ops per DAO proposal batch (default: 45)
+ *   --batch-size N     Ops per publish batch (default: 5000)
  *   --rename "Name"    Rename the space entity after deletion
  *   --type <typeId>    Only delete entities matching this type ID
  *   --exclude-type <typeId>  Skip entities of this type
@@ -38,18 +35,13 @@ import { fileURLToPath } from 'node:url';
 import {
   Graph,
   Account,
-  daoSpace,
+  personalSpace,
   getSmartAccountWalletClient,
   TESTNET_RPC_URL,
 } from '@geoprotocol/geo-sdk';
-import { SpaceRegistryAbi, DaoSpaceAbi } from '@geoprotocol/geo-sdk/abis';
+import { SpaceRegistryAbi } from '@geoprotocol/geo-sdk/abis';
 import { TESTNET } from '@geoprotocol/geo-sdk/contracts';
-import {
-  createPublicClient,
-  http,
-  encodeFunctionData,
-  encodeAbiParameters,
-} from 'viem';
+import { createPublicClient, http } from 'viem';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -57,31 +49,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const GEO_GRAPHQL_URL = 'https://testnet-api.geobrowser.io/graphql';
 
-const DAO_SPACE_ADDRESS = '0xd3a0cce0d01214a1fc5cdedf8ca78bc1618f7c2f';
-const DAO_SPACE_ID_HEX = '0x6b05a4fc85e69e56c15e2c6891e1df32';
-const DAO_SPACE_ID = DAO_SPACE_ID_HEX.slice(2);
-
-// Personal space ID — resolved dynamically from the smart account address at runtime.
-let PERSONAL_SPACE_ID: `0x${string}`;
-
-// DAOSpace VoteOption enum (matches Solidity contract in geogenesis)
-// None=0, Yes=1, No=2, Abstain=3
-const VoteOption = { None: 0, Yes: 1, No: 2, Abstain: 3 } as const;
-
-// Account type ID — entities of this type are created by Account.make() in every proposal.
+// Account type ID — entities of this type are created by Account.make() in every publish.
 // We must skip deleting these; they get recreated immediately.
 const ACCOUNT_TYPE_ID = 'cb69723f7456471aa8ad3e93ddc3edfe';
 
-// keccak256('GOVERNANCE.PROPOSAL_VOTED')
-const PROPOSAL_VOTED_ACTION =
-  '0x4ebf5f29676cedf7e2e4d346a8433289278f95a9fda73691dc1ce24574d5819e' as `0x${string}`;
-
-// keccak256('GOVERNANCE.PROPOSAL_EXECUTED')
-const PROPOSAL_EXECUTED_ACTION =
-  '0x62a60c0a9681612871e0dafa0f24bb0c83cbdde8be5a6299979c88d382369e96' as `0x${string}`;
-
 const DEFAULT_BATCH_SIZE = 5_000;
-const SLEEP_BETWEEN_BATCHES_MS = 4_000;
+const SLEEP_BETWEEN_BATCHES_MS = 2_000;
 
 // ── CLI args ─────────────────────────────────────────────────────────────────
 
@@ -111,7 +84,7 @@ const BATCH_SIZE = parseIntArg('--batch-size') ?? DEFAULT_BATCH_SIZE;
 const TYPE_FILTER = parseStringArg('--type');
 const EXCLUDE_TYPE_FILTER = parseStringArg('--exclude-type');
 
-const PROGRESS_LOG_PATH = join(__dirname, '..', 'backups', 'deletion-progress.jsonl');
+const PROGRESS_LOG_PATH = join(__dirname, '..', 'backups', 'personal-deletion-progress.jsonl');
 
 const CONFIRM_THRESHOLD = 1_000;
 
@@ -124,10 +97,6 @@ function sleep(ms: number): Promise<void> {
 function withHexPrefix(value: string): `0x${string}` {
   const trimmed = value.trim().toLowerCase();
   return (trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`) as `0x${string}`;
-}
-
-function bytes16ToBytes32(b16: string): `0x${string}` {
-  return ('0x' + b16.slice(2) + '0'.repeat(32)) as `0x${string}`;
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -318,78 +287,6 @@ async function listAllRelations(spaceId: string, limit?: number | null): Promise
   return limit ? out.slice(0, limit) : out;
 }
 
-// ── Voting & execution (SpaceRegistryAbi.enter pattern) ──────────────────────
-
-type SmartAccount = Awaited<ReturnType<typeof getSmartAccountWalletClient>>;
-type PublicClient = ReturnType<typeof createPublicClient>;
-
-async function voteOnProposal(
-  smartAccount: SmartAccount,
-  publicClient: PublicClient,
-  proposalId: `0x${string}`,
-  daoSpaceIdHex: string,
-): Promise<{ voteTxHash: string; voteReceipt: { status: string } }> {
-  const voteData = encodeAbiParameters(
-    [
-      { type: 'bytes16', name: 'proposalId' },
-      { type: 'uint8', name: 'voteOption' },
-    ],
-    [proposalId, VoteOption.Yes],
-  );
-
-  const calldata = encodeFunctionData({
-    abi: SpaceRegistryAbi,
-    functionName: 'enter',
-    args: [
-      PERSONAL_SPACE_ID as `0x${string}`,
-      daoSpaceIdHex as `0x${string}`,
-      PROPOSAL_VOTED_ACTION,
-      bytes16ToBytes32(proposalId),
-      voteData,
-      '0x',
-    ],
-  });
-
-  const voteTxHash = await smartAccount.sendTransaction({
-    to: TESTNET.SPACE_REGISTRY_ADDRESS,
-    data: calldata,
-  });
-  const voteReceipt = await publicClient.waitForTransactionReceipt({ hash: voteTxHash });
-  return { voteTxHash, voteReceipt: { status: voteReceipt.status } };
-}
-
-async function executeProposal(
-  smartAccount: SmartAccount,
-  publicClient: PublicClient,
-  proposalId: `0x${string}`,
-  daoSpaceIdHex: string,
-): Promise<{ execTxHash: string; execReceipt: { status: string } }> {
-  const execData = encodeAbiParameters(
-    [{ type: 'bytes16', name: 'proposalId' }],
-    [proposalId],
-  );
-
-  const calldata = encodeFunctionData({
-    abi: SpaceRegistryAbi,
-    functionName: 'enter',
-    args: [
-      PERSONAL_SPACE_ID as `0x${string}`,
-      daoSpaceIdHex as `0x${string}`,
-      PROPOSAL_EXECUTED_ACTION,
-      bytes16ToBytes32(proposalId),
-      execData,
-      '0x',
-    ],
-  });
-
-  const execTxHash = await smartAccount.sendTransaction({
-    to: TESTNET.SPACE_REGISTRY_ADDRESS,
-    data: calldata,
-  });
-  const execReceipt = await publicClient.waitForTransactionReceipt({ hash: execTxHash });
-  return { execTxHash, execReceipt: { status: execReceipt.status } };
-}
-
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -402,9 +299,8 @@ async function main(): Promise<void> {
   }
   const hexKey = withHexPrefix(privateKey);
 
-  console.log('=== Clear ALL Entities & Relations From DAO Space ===');
+  console.log('=== Clear ALL Entities & Relations From Personal Space ===');
   console.log(`Mode: ${DRY_RUN ? 'DRY RUN' : 'LIVE'}`);
-  console.log(`DAO space: ${DAO_SPACE_ID_HEX} @ ${DAO_SPACE_ADDRESS}`);
   if (RENAME_TO) console.log(`Rename to: "${RENAME_TO}"`);
   if (ALL) console.log('Mode: --all (loop until empty, 50K chunks)');
   if (TOTAL_LIMIT) console.log(`Total limit: ${TOTAL_LIMIT} combined items`);
@@ -414,10 +310,25 @@ async function main(): Promise<void> {
   if (EXCLUDE_TYPE_FILTER) console.log(`Exclude type: skip entities with type ${EXCLUDE_TYPE_FILTER}`);
   if (YES) console.log('Confirmation: skipped (--yes)');
 
-  // In dry-run mode with no limit and no type filters, use totalCount to avoid paginating the entire space
+  // Initialize wallet + resolve personal space ID
+  const smartAccount = await getSmartAccountWalletClient({ privateKey: hexKey });
+  const publicClient = createPublicClient({ transport: http(TESTNET_RPC_URL) });
+
+  const rawSpaceId = await publicClient.readContract({
+    address: TESTNET.SPACE_REGISTRY_ADDRESS as `0x${string}`,
+    abi: SpaceRegistryAbi,
+    functionName: 'addressToSpaceId',
+    args: [smartAccount.account.address],
+  });
+  const personalSpaceId = String(rawSpaceId).slice(2, 34).toLowerCase();
+  const personalSpaceIdHex = `0x${personalSpaceId}` as `0x${string}`;
+  console.log(`\n   Smart account: ${smartAccount.account.address}`);
+  console.log(`   Personal space ID: ${personalSpaceIdHex}`);
+
+  // Dry-run fast path: just query counts
   if (DRY_RUN && !LIMIT && !TOTAL_LIMIT && !TYPE_FILTER && !EXCLUDE_TYPE_FILTER) {
-    console.log('\n1) Querying total counts in DAO space...');
-    const counts = await getTotalCounts(DAO_SPACE_ID);
+    console.log('\n1) Querying total counts in personal space...');
+    const counts = await getTotalCounts(personalSpaceId);
     console.log(`   Total entities:  ${counts.entities}`);
     console.log(`   Total relations: ${counts.relations}`);
 
@@ -432,21 +343,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Initialize wallet + resolve personal space ID (needed for all live paths)
-  const smartAccount = await getSmartAccountWalletClient({ privateKey: hexKey });
-  const publicClient = createPublicClient({ transport: http(TESTNET_RPC_URL) });
-
-  const rawSpaceId = await publicClient.readContract({
-    address: TESTNET.SPACE_REGISTRY_ADDRESS as `0x${string}`,
-    abi: SpaceRegistryAbi,
-    functionName: 'addressToSpaceId',
-    args: [smartAccount.account.address],
-  });
-  PERSONAL_SPACE_ID = `0x${String(rawSpaceId).slice(2, 34).toLowerCase()}` as `0x${string}`;
-  console.log(`\n   Smart account: ${smartAccount.account.address}`);
-  console.log(`   Personal space ID: ${PERSONAL_SPACE_ID}`);
-
-  // --all mode: loop in 10K chunks until empty
+  // --all mode: loop in chunks until empty
   if (ALL) {
     const allStart = Date.now();
     let pass = 0;
@@ -461,7 +358,8 @@ async function main(): Promise<void> {
       console.log('='.repeat(60));
 
       const result = await runDeletionPass({
-        smartAccount, publicClient, chunkLimit: 50_000, skipConfirm: true,
+        smartAccount, personalSpaceId, personalSpaceIdHex,
+        chunkLimit: 50_000, skipConfirm: true,
       });
 
       totalOpsAll += result.opsAttempted;
@@ -494,26 +392,29 @@ async function main(): Promise<void> {
     console.log('='.repeat(60));
 
     if (RENAME_TO) {
-      await runRename(smartAccount, publicClient);
+      await runRename(smartAccount, personalSpaceId, personalSpaceIdHex);
     }
     return;
   }
 
-  // Single-pass mode (with or without --limit/--total-limit)
+  // Single-pass mode
   const result = await runDeletionPass({
-    smartAccount, publicClient, chunkLimit: TOTAL_LIMIT ?? undefined, skipConfirm: false,
+    smartAccount, personalSpaceId, personalSpaceIdHex,
+    chunkLimit: TOTAL_LIMIT ?? undefined, skipConfirm: false,
   });
 
-  if (result.aborted) return; // user declined confirmation or dry-run
+  if (result.aborted) return;
 
   if (RENAME_TO) {
-    await runRename(smartAccount, publicClient);
+    await runRename(smartAccount, personalSpaceId, personalSpaceIdHex);
   }
 
   console.log('\n=== Done ===');
 }
 
 // ── Deletion pass ─────────────────────────────────────────────────────────────
+
+type SmartAccount = Awaited<ReturnType<typeof getSmartAccountWalletClient>>;
 
 interface PassResult {
   aborted: boolean;
@@ -527,11 +428,12 @@ interface PassResult {
 
 async function runDeletionPass(opts: {
   smartAccount: SmartAccount;
-  publicClient: PublicClient;
+  personalSpaceId: string;
+  personalSpaceIdHex: `0x${string}`;
   chunkLimit?: number;
   skipConfirm: boolean;
 }): Promise<PassResult> {
-  const { smartAccount, publicClient, chunkLimit, skipConfirm } = opts;
+  const { smartAccount, personalSpaceId, personalSpaceIdHex, chunkLimit, skipConfirm } = opts;
 
   const empty: PassResult = {
     aborted: false, opsAttempted: 0, batchesCompleted: 0, batchesFailed: 0,
@@ -542,7 +444,7 @@ async function runDeletionPass(opts: {
 
   // 0) Get before-counts
   console.log('\n0) Querying before-counts...');
-  const countsBefore = await getTotalCounts(DAO_SPACE_ID);
+  const countsBefore = await getTotalCounts(personalSpaceId);
   console.log(`   Entities before:  ${countsBefore.entities}`);
   console.log(`   Relations before: ${countsBefore.relations}`);
 
@@ -556,25 +458,25 @@ async function runDeletionPass(opts: {
   }
 
   // 1) Query entities
-  console.log('\n1) Querying entities in DAO space...');
-  let entities = await listAllEntities(DAO_SPACE_ID, entityLimit);
+  console.log('\n1) Querying entities in personal space...');
+  let entities = await listAllEntities(personalSpaceId, entityLimit);
   const beforeFilter = entities.length;
+
+  // Filter out Account entities unless --include-accounts
   if (!INCLUDE_ACCOUNTS) {
     entities = entities.filter((e) => {
-      // Skip entities with Account type
       if (e.typeIds.includes(ACCOUNT_TYPE_ID)) return false;
-      // Skip entities named after any Ethereum address (0x + 40 hex chars)
       if (e.name && /^0x[a-fA-F0-9]{40}$/i.test(e.name)) return false;
       return true;
     });
   }
 
-  // Apply --type filter: only keep entities matching this type
+  // Apply --type filter
   if (TYPE_FILTER) {
     entities = entities.filter((e) => e.typeIds.includes(TYPE_FILTER));
   }
 
-  // Apply --exclude-type filter: skip entities of this type
+  // Apply --exclude-type filter
   if (EXCLUDE_TYPE_FILTER) {
     entities = entities.filter((e) => !e.typeIds.includes(EXCLUDE_TYPE_FILTER));
   }
@@ -589,8 +491,8 @@ async function runDeletionPass(opts: {
   }
 
   // 2) Query relations
-  console.log('\n2) Querying relations in DAO space...');
-  let relations = await listAllRelations(DAO_SPACE_ID, relationLimit);
+  console.log('\n2) Querying relations in personal space...');
+  let relations = await listAllRelations(personalSpaceId, relationLimit);
   console.log(`   Found ${relations.length} relations`);
 
   // Trim to total limit if needed
@@ -628,9 +530,8 @@ async function runDeletionPass(opts: {
   // Confirmation prompt for >1000 items
   if (!skipConfirm && !YES && totalOps > CONFIRM_THRESHOLD) {
     const batchCount = Math.ceil(totalOps / BATCH_SIZE);
-    const estMinutes = Math.ceil(batchCount * (SLEEP_BETWEEN_BATCHES_MS / 1000 + 8) / 60);
     console.log(`\n   About to delete ${totalOps.toLocaleString()} items (${relations.length} relations + ${entities.length} entities)`);
-    console.log(`   This will create ~${batchCount} DAO proposals and take ~${estMinutes} minutes.`);
+    console.log(`   This will create ~${batchCount} publish edits.`);
     const ok = await confirm('   Proceed? (y/N) ');
     if (!ok) {
       console.log('   Aborted.');
@@ -646,23 +547,21 @@ async function runDeletionPass(opts: {
     ...entities.map((e) => ({ kind: 'entity' as const, id: e.id, propertyIds: e.propertyIds })),
   ];
 
-  // For entities, each deletion generates 2 ops (1 updateEntity to unset values + 1 deleteEntity)
-  // For relations, each deletion generates 1 op (deleteRelation)
   const totalOpsEstimate = relations.length + entities.length * 2;
   const batches = chunk(deletions, BATCH_SIZE);
   console.log(`   Total items: ${deletions.length} (${relations.length} relations + ${entities.length} entities)`);
   console.log(`   Estimated ops: ~${totalOpsEstimate} across ${batches.length} batches (batchSize=${BATCH_SIZE})`);
 
-  // 4) Propose + vote + execute each batch
-  console.log('\n4) Proposing deletion batches to DAO (propose + vote + execute)...');
+  // 4) Publish each batch
+  console.log('\n4) Publishing deletion batches to personal space...');
 
-  // Try to reuse an existing Account entity instead of creating a new one every run
+  // Try to reuse an existing Account entity
   let accountId: string;
   let accountOps: unknown[] = [];
-  const existingAccountId = await findExistingAccountId(DAO_SPACE_ID);
+  const existingAccountId = await findExistingAccountId(personalSpaceId);
   if (existingAccountId) {
     accountId = existingAccountId;
-    accountOps = []; // No ops needed — account already exists
+    accountOps = [];
     console.log(`   Reusing existing Account entity: ${existingAccountId}`);
   } else {
     const result = Account.make(smartAccount.account.address);
@@ -679,7 +578,7 @@ async function runDeletionPass(opts: {
   for (let i = 0; i < batches.length; i++) {
     const batchStart = Date.now();
     const batch = batches[i];
-    const batchName = `Clear DAO space (${i + 1}/${batches.length})`;
+    const batchName = `Clear personal space (${i + 1}/${batches.length})`;
     console.log(`\n   Batch ${i + 1}/${batches.length}: ${batch.length} delete ops`);
 
     try {
@@ -689,7 +588,6 @@ async function runDeletionPass(opts: {
           const result = Graph.deleteRelation({ id: item.id });
           ops.push(...result.ops);
         } else {
-          // Unset all property values first, then delete entity
           if (item.propertyIds && item.propertyIds.length > 0) {
             const unsetResult = Graph.updateEntity({
               id: item.id,
@@ -704,62 +602,18 @@ async function runDeletionPass(opts: {
 
       const allOps = i === 0 && accountOps.length > 0 ? [...accountOps, ...ops] : ops;
 
-      const { proposalId, to, calldata } = await daoSpace.proposeEdit({
+      // personalSpace.publishEdit() — no governance, direct publish
+      // spaceId expects dashless 32-char hex (no 0x prefix)
+      const { to, calldata } = await personalSpace.publishEdit({
         name: batchName,
-        ops: allOps as Parameters<typeof daoSpace.proposeEdit>[0]['ops'],
+        ops: allOps as Parameters<typeof personalSpace.publishEdit>[0]['ops'],
         author: accountId,
-        daoSpaceAddress: DAO_SPACE_ADDRESS,
-        callerSpaceId: PERSONAL_SPACE_ID,
-        daoSpaceId: DAO_SPACE_ID_HEX,
-        votingMode: 'FAST',
+        spaceId: personalSpaceId,
         network: 'TESTNET',
       });
 
-      const proposeTxHash = await smartAccount.sendTransaction({ to, data: calldata });
-      const proposeReceipt = await publicClient.waitForTransactionReceipt({ hash: proposeTxHash });
-
-      console.log(`     proposalId: ${proposalId}`);
-      console.log(`     propose tx: ${proposeTxHash} (status: ${proposeReceipt.status})`);
-
-      // Vote YES
-      const { voteTxHash, voteReceipt } = await voteOnProposal(
-        smartAccount,
-        publicClient,
-        proposalId as `0x${string}`,
-        DAO_SPACE_ID_HEX,
-      );
-      console.log(`     vote tx: ${voteTxHash} (status: ${voteReceipt.status})`);
-
-      // Check if auto-executed, otherwise execute manually
-      const infoAfter = await publicClient.readContract({
-        address: DAO_SPACE_ADDRESS as `0x${string}`,
-        abi: DaoSpaceAbi,
-        functionName: 'getLatestProposalInformation',
-        args: [proposalId as `0x${string}`],
-      });
-
-      const executed = (infoAfter as unknown[])[0];
-      if (executed) {
-        console.log('     auto-executed with vote');
-      } else {
-        const thresholdReached = await publicClient.readContract({
-          address: DAO_SPACE_ADDRESS as `0x${string}`,
-          abi: DaoSpaceAbi,
-          functionName: 'isSupportThresholdReached',
-          args: [proposalId as `0x${string}`],
-        });
-        if (thresholdReached) {
-          const { execTxHash, execReceipt } = await executeProposal(
-            smartAccount,
-            publicClient,
-            proposalId as `0x${string}`,
-            DAO_SPACE_ID_HEX,
-          );
-          console.log(`     exec tx: ${execTxHash} (status: ${execReceipt.status})`);
-        } else {
-          console.log('     threshold not reached; proposal pending additional votes');
-        }
-      }
+      const txHash = await smartAccount.sendTransaction({ to, data: calldata });
+      console.log(`     tx: ${txHash}`);
 
       completedBatches++;
     } catch (err) {
@@ -783,7 +637,7 @@ async function runDeletionPass(opts: {
 
   // 5) Post-verify
   console.log('\n5) Post-verification...');
-  const countsAfter = await getTotalCounts(DAO_SPACE_ID);
+  const countsAfter = await getTotalCounts(personalSpaceId);
   console.log(`   Entities:  ${countsBefore.entities} → ${countsAfter.entities} (Δ ${countsBefore.entities - countsAfter.entities})`);
   console.log(`   Relations: ${countsBefore.relations} → ${countsAfter.relations} (Δ ${countsBefore.relations - countsAfter.relations})`);
 
@@ -836,16 +690,19 @@ async function runDeletionPass(opts: {
 
 // ── Rename helper ─────────────────────────────────────────────────────────────
 
-async function runRename(smartAccount: SmartAccount, publicClient: PublicClient): Promise<void> {
+async function runRename(
+  smartAccount: SmartAccount,
+  personalSpaceId: string,
+  personalSpaceIdHex: `0x${string}`,
+): Promise<void> {
   if (!RENAME_TO) return;
   console.log(`\nRenaming space entity to "${RENAME_TO}"...`);
 
-  const renameOps = Graph.updateEntity({ id: DAO_SPACE_ID, name: RENAME_TO }).ops;
+  const renameOps = Graph.updateEntity({ id: personalSpaceId, name: RENAME_TO }).ops;
 
-  // Reuse existing Account entity if available
   let accountId: string;
   let renameAccountOps: unknown[] = [];
-  const existingAccountId = await findExistingAccountId(DAO_SPACE_ID);
+  const existingAccountId = await findExistingAccountId(personalSpaceId);
   if (existingAccountId) {
     accountId = existingAccountId;
   } else {
@@ -855,56 +712,17 @@ async function runRename(smartAccount: SmartAccount, publicClient: PublicClient)
   }
   const allOps = [...renameAccountOps, ...renameOps];
 
-  const { proposalId, to, calldata } = await daoSpace.proposeEdit({
+  // spaceId expects dashless 32-char hex (no 0x prefix)
+  const { to, calldata } = await personalSpace.publishEdit({
     name: `Rename space to "${RENAME_TO}"`,
-    ops: allOps as Parameters<typeof daoSpace.proposeEdit>[0]['ops'],
+    ops: allOps as Parameters<typeof personalSpace.publishEdit>[0]['ops'],
     author: accountId,
-    daoSpaceAddress: DAO_SPACE_ADDRESS,
-    callerSpaceId: PERSONAL_SPACE_ID,
-    daoSpaceId: DAO_SPACE_ID_HEX,
-    votingMode: 'FAST',
+    spaceId: personalSpaceId,
     network: 'TESTNET',
   });
 
-  const proposeTxHash = await smartAccount.sendTransaction({ to, data: calldata });
-  const proposeReceipt = await publicClient.waitForTransactionReceipt({ hash: proposeTxHash });
-  console.log(`     proposalId: ${proposalId}`);
-  console.log(`     propose tx: ${proposeTxHash} (status: ${proposeReceipt.status})`);
-
-  const { voteTxHash, voteReceipt } = await voteOnProposal(
-    smartAccount,
-    publicClient,
-    proposalId as `0x${string}`,
-    DAO_SPACE_ID_HEX,
-  );
-  console.log(`     vote tx: ${voteTxHash} (status: ${voteReceipt.status})`);
-
-  const infoAfter = await publicClient.readContract({
-    address: DAO_SPACE_ADDRESS as `0x${string}`,
-    abi: DaoSpaceAbi,
-    functionName: 'getLatestProposalInformation',
-    args: [proposalId as `0x${string}`],
-  });
-  const executed = (infoAfter as unknown[])[0];
-  if (executed) {
-    console.log('     auto-executed with vote');
-  } else {
-    const thresholdReached = await publicClient.readContract({
-      address: DAO_SPACE_ADDRESS as `0x${string}`,
-      abi: DaoSpaceAbi,
-      functionName: 'isSupportThresholdReached',
-      args: [proposalId as `0x${string}`],
-    });
-    if (thresholdReached) {
-      const { execTxHash, execReceipt } = await executeProposal(
-        smartAccount,
-        publicClient,
-        proposalId as `0x${string}`,
-        DAO_SPACE_ID_HEX,
-      );
-      console.log(`     exec tx: ${execTxHash} (status: ${execReceipt.status})`);
-    }
-  }
+  const txHash = await smartAccount.sendTransaction({ to, data: calldata });
+  console.log(`     tx: ${txHash}`);
 }
 
 main().catch((err: unknown) => {

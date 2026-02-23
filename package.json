@@ -39,7 +39,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "clear-dao": "tsx scripts/clear-dao-space.ts"
+    "clear-dao": "tsx scripts/clear-dao-space.ts",
+    "clear-personal": "tsx scripts/clear-personal-space.ts"
   },
   "dependencies": {
     "@geoprotocol/geo-sdk": "^0.9.0",
