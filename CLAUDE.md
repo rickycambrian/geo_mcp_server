@@ -8,10 +8,11 @@ MCP server that provides full access to the Geo protocol SDK for knowledge graph
 - `src/server.ts` - Server setup, registers all tool modules
 - `src/state/session.ts` - Singleton edit session managing op accumulation
 - `src/tools/graph.ts` - Core graph operations (create/update/delete property, type, entity, relation, image)
-- `src/tools/spaces.ts` - Wallet config, space management, publishing, DAO proposals
+- `src/tools/spaces.ts` - Wallet config, space management, publishing, DAO proposals, canvas workflows
 - `src/tools/advanced.ts` - High-level UX tools (build_schema, create_knowledge_graph, get_system_ids)
 - `src/tools/read.ts` - Read/query tools via GraphQL API (search, get entity/space/proposal, list)
 - `src/tools/governance.ts` - DAO governance write tools (vote, propose editor/subspace changes)
+- `src/tools/workspace.ts` - Workspace entity CRUD (notes, tasks, projects)
 - `src/tools/helpers.ts` - Shared `ok()`/`err()` MCP response helpers
 - `src/utils/wallet.ts` - Shared wallet configuration helpers (ensureWalletConfigured, normalizeAddress)
 - `src/api/client.ts` - Fetch-based GraphQL client + UUID format helpers
@@ -57,6 +58,24 @@ npm test           # Run unit tests
 npm run test:watch # Run tests in watch mode
 npm run test:coverage # Run tests with coverage
 ```
+
+## Publishing to npm & Marketplace
+
+After making changes, publish to npm and update the MCP marketplace:
+
+1. **Build & test**: `npm run build && npm test`
+2. **Bump version** in `package.json` (also update `src/server.ts` version string)
+3. **Commit & push**: `git add . && git commit -m "feat: vX.Y.Z" && git push origin main`
+4. **Publish**: `npm publish` (requires interactive `npm login` -- no NPM_TOKEN in env; enrichment works without npm publish since it clones from GitHub)
+5. **Check enrichment**: `curl -s 'https://mcp.rickydata.org/api/enrichment/check?repo=https://github.com/rickycambrian/geo_mcp_server'`
+6. **Trigger re-enrichment** ($1 USDC, ~45s): `node ../mcp_deployments_registry/mcp-gateway-sdk/scripts/trigger-enrichment.mjs "https://github.com/rickycambrian/geo_mcp_server" --force`
+7. **Verify**: toolsCount >= 36, securityScore >= 75
+
+Marketplace details: npm package `geo-mcp-server`, KFDB ID `619fea19-3fdd-4756-a6fb-e7640bf6412d`, slug `rickycambrian-geo-mcp-server`.
+
+If enrichment shows 0 tools (known regression -- enricher finds tools but writes count as 0), fix via direct KFDB write using the `mcp-server-update` skill in `../mcp_deployments_registry`.
+
+Agent gateway auto-deploys when `.claude/agents/**` or `.claude/skills/**` change in `mcp_deployments_registry` (via `.github/workflows/deploy-agent-gateway.yml`).
 
 ## Environment Variables
 
