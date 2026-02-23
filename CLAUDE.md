@@ -118,6 +118,20 @@ Agent gateway auto-deploys when `.claude/agents/**` or `.claude/skills/**` chang
 
 Currently hardcoded to TESTNET. The SDK's `Network` type only supports `'TESTNET'`.
 
+## Editing Agents & Skills
+
+**To modify marketplace agents (e.g., `research-paper-analyst`) or their skills, work in `../mcp_deployments_registry` — NOT this repo.**
+
+This repo (`geo_mcp_server`) is the MCP server library that agents *consume*. It has only 1 read-only agent (`geo-explorer`) and 2 utility skills (`publish-research`, `clear-dao-space`).
+
+The `mcp_deployments_registry` repo is the agent hub with 20+ agents and 70+ skills, including:
+- `.claude/agents/research-paper-analyst.md` — the research paper agent definition
+- `.claude/skills/geo-publish-research/SKILL.md` — canonical research publishing skill
+- `.claude/skills/paper-discovery/`, `paper-extraction/`, `claimify-decompose/` — research pipeline skills
+- `.claude/skills/geo-entity-creation/`, `geo-dao-management/` — Geo operation skills
+
+Pushing changes to `.claude/agents/**` or `.claude/skills/**` in `mcp_deployments_registry` auto-triggers agent gateway redeployment via CI (`.github/workflows/deploy-agent-gateway.yml`).
+
 ## Related Repositories
 
 ### mcp_deployments_registry
