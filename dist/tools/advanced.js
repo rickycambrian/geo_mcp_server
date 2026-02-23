@@ -154,9 +154,14 @@ const RESEARCH_ONTOLOGY_IDS = {
         paperAuthors: '5c8a2a40986a29fe3430775cc2c0fa2e', // Relation
         paperVenue: 'adb8047237cbc48a9bfe420b4cf8398f', // Relation
         paperRelatedTopics: '806d52bc27e94c9193c057978b093351', // Relation
+        paperTags: '257090341ba5406f94e4d4af90042fba', // Text
+        paperWebUrl: '412ff593e9154012a43d4c27ec5c68b6', // Text
+        paperCitationCount: '47ee87d8fac606d73e69d4c212804ffb', // Integer
         // Claim properties
         claimSources: '49c5d5e1679a4dbdbfd33f618f227c94', // Relation
         claimRelatedTopics: '806d52bc27e94c9193c057978b093351', // Relation (shared)
+        claimQuotes: 'f9eeaf9d9eb741b1ac5d257c6e82e526', // Text
+        claimTags: '257090341ba5406f94e4d4af90042fba', // Text (shared with paper)
     },
 };
 const CANONICAL_RESEARCH_SCHEMA_IDS = {
@@ -603,6 +608,11 @@ export function registerAdvancedTools(server, session) {
         }
     });
     // ── create_research_paper_and_claims ─────────────────────────────────
+    // LEGACY: This tool uses locally-created types (CANONICAL_RESEARCH_SCHEMA_IDS)
+    // that do NOT match the canonical GeoBrowser Research ontology.
+    // For new research publishing, use `create_research_ontology_paper_and_claims`
+    // instead, which uses the canonical Paper/Claim/Person/Topic/Project types
+    // from RESEARCH_ONTOLOGY_IDS.
     server.tool('create_research_paper_and_claims', 'Create a Research Paper entity and multiple Research Claim entities using the canonical Geo research schema. Claim entities are always multi-typed with the canonical GeoBrowser Claim type so they show up in standard Claim views.', {
         paper: ResearchPaperInputSchema.describe('Paper metadata'),
         claims: z
@@ -1015,6 +1025,10 @@ export function registerAdvancedTools(server, session) {
                 }
                 descParts.push(`Source: ${paperEntityName}${arxivId ? ` (arXiv:${arxivId})` : ''}`);
                 const claimDescription = descParts.filter(Boolean).join('\n\n');
+                const claimValues = [];
+                if (claim.sourceQuote) {
+                    claimValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.claimQuotes, 'text', claim.sourceQuote));
+                }
                 const claimRelations = {};
                 if (shouldLinkClaimsToPaper) {
                     claimRelations[RESEARCH_ONTOLOGY_IDS.properties.claimSources] = { toEntity: paperResult.id };
@@ -1026,6 +1040,7 @@ export function registerAdvancedTools(server, session) {
                     name: claimName,
                     description: claimDescription,
                     types: [RESEARCH_ONTOLOGY_IDS.types.claim],
+                    values: claimValues.length > 0 ? claimValues : undefined,
                     relations: Object.keys(claimRelations).length > 0 ? claimRelations : undefined,
                 });
                 session.addOps(claimResult.ops, {
