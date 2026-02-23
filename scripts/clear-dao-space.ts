@@ -188,6 +188,7 @@ interface EntityNode {
   id: string;
   name: string | null;
   typeIds: string[];
+  propertyIds: string[];
 }
 
 interface PageInfo {
@@ -251,13 +252,19 @@ async function listAllEntities(spaceId: string, limit?: number | null): Promise<
       `query($spaceId: UUID, $first: Int!, $after: Cursor) {
         entitiesConnection(first: $first, after: $after, spaceId: $spaceId, orderBy: CREATED_AT_ASC) {
           pageInfo { hasNextPage endCursor }
-          nodes { id name typeIds }
+          nodes { id name typeIds valuesList { propertyId } }
         }
       }`,
       { spaceId, first, after },
     );
-    const conn = data.entitiesConnection as { pageInfo: PageInfo; nodes: EntityNode[] };
-    out.push(...conn.nodes);
+    interface RawEntityNode { id: string; name: string | null; typeIds: string[]; valuesList: Array<{ propertyId: string }> }
+    const conn = data.entitiesConnection as { pageInfo: PageInfo; nodes: RawEntityNode[] };
+    out.push(...conn.nodes.map(n => ({
+      id: n.id,
+      name: n.name,
+      typeIds: n.typeIds,
+      propertyIds: [...new Set(n.valuesList.map(v => v.propertyId))],
+    })));
     if (!conn.pageInfo.hasNextPage) break;
     if (limit && out.length >= limit) break;
     after = conn.pageInfo.endCursor;
@@ -608,13 +615,17 @@ async function runDeletionPass(opts: {
   // 3) Build delete ops
   console.log('\n3) Building deletion batches...');
 
-  const deletions: Array<{ kind: 'relation' | 'entity'; id: string }> = [
+  const deletions: Array<{ kind: 'relation' | 'entity'; id: string; propertyIds?: string[] }> = [
     ...relations.map((r) => ({ kind: 'relation' as const, id: r.id })),
-    ...entities.map((e) => ({ kind: 'entity' as const, id: e.id })),
+    ...entities.map((e) => ({ kind: 'entity' as const, id: e.id, propertyIds: e.propertyIds })),
   ];
 
+  // For entities, each deletion generates 2 ops (1 updateEntity to unset values + 1 deleteEntity)
+  // For relations, each deletion generates 1 op (deleteRelation)
+  const totalOpsEstimate = relations.length + entities.length * 2;
   const batches = chunk(deletions, BATCH_SIZE);
-  console.log(`   Total delete ops: ${deletions.length} across ${batches.length} batches (batchSize=${BATCH_SIZE})`);
+  console.log(`   Total items: ${deletions.length} (${relations.length} relations + ${entities.length} entities)`);
+  console.log(`   Estimated ops: ~${totalOpsEstimate} across ${batches.length} batches (batchSize=${BATCH_SIZE})`);
 
   // 4) Propose + vote + execute each batch
   console.log('\n4) Proposing deletion batches to DAO (propose + vote + execute)...');
@@ -652,6 +663,14 @@ async function runDeletionPass(opts: {
           const result = Graph.deleteRelation({ id: item.id });
           ops.push(...result.ops);
         } else {
+          // Unset all property values first, then delete entity
+          if (item.propertyIds && item.propertyIds.length > 0) {
+            const unsetResult = Graph.updateEntity({
+              id: item.id,
+              unset: item.propertyIds.map(p => ({ property: p, language: 'all' as const })),
+            });
+            ops.push(...unsetResult.ops);
+          }
           const result = Graph.deleteEntity({ id: item.id });
           ops.push(...result.ops);
         }
