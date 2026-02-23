@@ -76,6 +76,20 @@ CI/CD pipeline that syncs MCP marketplace data to the Geo knowledge graph. Locat
 
 **Both repos target the same DAO space**: `6b05a4fc85e69e56c15e2c6891e1df32` at address `0xd3a0cce0d01214a1fc5cdedf8ca78bc1618f7c2f`.
 
+#### Research Paper Publishing
+
+The registry repo hosts the `research-paper-analyst` agent (`.claude/agents/research-paper-analyst.md`) which **uses this MCP server's** `create_research_ontology_paper_and_claims` tool for publishing papers. The agent page is at https://mcpmarketplace.rickydata.org/agents/research-paper-analyst.
+
+The `geo-publish-research` skill (`.claude/skills/geo-publish-research/SKILL.md`) in the registry repo contains the canonical type/property ID tables used for verification.
+
+**DEPRECATED legacy scripts** (do NOT use for new research publishing):
+- `mcp-marketplace/scripts/geo-research-schema.mjs` - Old schema definitions using custom Research Paper/Research Claim types
+- `mcp-marketplace/scripts/publish-research-to-dao.mjs` - Old script that creates non-canonical types
+
+These legacy scripts create local type definitions that do NOT match the canonical Research ontology. Always use `create_research_ontology_paper_and_claims` instead.
+
+#### MCP Marketplace Scripts (active)
+
 Key scripts in `mcp-marketplace/scripts/`:
 - `publish-to-dao.mjs` - Publishes MCP server entities to the DAO space. Supports `--dry-run`, `--update-existing`, `--create-tools`, `--create-skills`, `--link-tools`, `--fix-schema`, and `--vote-pending <proposalId>`. Fetches server data from KFDB, creates entities with schema/relations, proposes DAO edits, votes YES, and auto-executes.
 - `clear-research-from-dao.mjs` - Deletes legacy research pipeline data (Research Paper/Claim/Author/Venue types and their instances) from the DAO space. Has safety guards to protect MCP registry entities. Supports `--dry-run`.

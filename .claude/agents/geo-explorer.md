@@ -27,7 +27,11 @@ Key spaces to know:
 
 Key type IDs:
 - Account type: `cb69723f7456471aa8ad3e93ddc3edfe`
+- Paper type: `1d2f7884e64e005ad897425c9879b0da`
 - Canonical Claim type: `96f859efa1ca4b229372c86ad58b694b`
+- Person type: `7ed45f2bc48b419e8e4664d5ff680b0d`
+- Topic type: `5ef5a5860f274d8e8f6c59ae5b3e89e2`
+- Project type: `484a18c5030a499cb0f2ef588ff16d50`
 
 All entity IDs use dashless 32-char hex format.
 

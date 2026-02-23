@@ -59,13 +59,14 @@ const VALUE_FIELDS = `
   id
   propertyId
   entityId
-  textValue
-  integerValue
-  floatValue
-  booleanValue
-  dateValue
-  value
-  createdAt
+  spaceId
+  string
+  language
+  unit
+  boolean
+  number
+  point
+  time
 `;
 
 const RELATION_FIELDS = `
@@ -74,8 +75,10 @@ const RELATION_FIELDS = `
   toEntityId
   typeId
   spaceId
-  index
-  createdAt
+  position
+  fromSpaceId
+  toSpaceId
+  verified
 `;
 
 // ── Registration ─────────────────────────────────────────────────────
