@@ -98,6 +98,7 @@ const LIMIT = parseIntArg('--limit');
 const TOTAL_LIMIT = parseIntArg('--total-limit');
 const YES = args.includes('--yes') || args.includes('-y');
 const ALL = args.includes('--all');
+const INCLUDE_ACCOUNTS = args.includes('--include-accounts');
 const BATCH_SIZE = parseIntArg('--batch-size') ?? DEFAULT_BATCH_SIZE;
 
 const PROGRESS_LOG_PATH = join(__dirname, '..', 'backups', 'deletion-progress.jsonl');
@@ -546,13 +547,15 @@ async function runDeletionPass(opts: {
   console.log('\n1) Querying entities in DAO space...');
   let entities = await listAllEntities(DAO_SPACE_ID, entityLimit);
   const beforeFilter = entities.length;
-  entities = entities.filter((e) => {
-    // Skip entities with Account type
-    if (e.typeIds.includes(ACCOUNT_TYPE_ID)) return false;
-    // Skip entities named after any Ethereum address (0x + 40 hex chars)
-    if (e.name && /^0x[a-fA-F0-9]{40}$/i.test(e.name)) return false;
-    return true;
-  });
+  if (!INCLUDE_ACCOUNTS) {
+    entities = entities.filter((e) => {
+      // Skip entities with Account type
+      if (e.typeIds.includes(ACCOUNT_TYPE_ID)) return false;
+      // Skip entities named after any Ethereum address (0x + 40 hex chars)
+      if (e.name && /^0x[a-fA-F0-9]{40}$/i.test(e.name)) return false;
+      return true;
+    });
+  }
   console.log(`   Found ${entities.length} entities (filtered out ${beforeFilter - entities.length} Account/address entities)`);
 
   if (entities.length > 0) {
