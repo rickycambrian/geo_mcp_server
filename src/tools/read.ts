@@ -211,10 +211,13 @@ export function registerReadTools(server: McpServer): void {
           filter.name = { includesInsensitive: name };
         }
         if (spaceIds && spaceIds.length > 0) {
-          filter.spaceIds = { contains: spaceIds.map(normalizeToUUID) };
+          const normalized = spaceIds.map(normalizeToUUID);
+          // anyEqualTo is most reliable for filtering entities by space membership
+          filter.spaceIds = { anyEqualTo: normalized[0] };
         }
         if (typeIds && typeIds.length > 0) {
-          filter.typeIds = { contains: typeIds.map(normalizeToUUID) };
+          const normalized = typeIds.map(normalizeToUUID);
+          filter.typeIds = { anyEqualTo: normalized[0] };
         }
 
         const hasFilter = Object.keys(filter).length > 0;
