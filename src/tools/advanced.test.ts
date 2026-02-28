@@ -424,15 +424,15 @@ describe('advanced tools', () => {
   });
 
   describe('create_research_ontology_paper_and_claims', () => {
-    it('creates paper with authors, venue, topics, and claims', async () => {
+    it('creates paper with authors, publishedIn, topics, and claims', async () => {
       const tools = await setupTools();
       const result = await tools.create_research_ontology_paper_and_claims.handler({
         paper: {
           title: 'Ontology Paper',
-          arxivId: '2502.99999',
-          publicationDate: '2024-06-15',
+          webUrl: 'https://arxiv.org/abs/2502.99999',
+          publishDate: '2024-06-15',
           authors: [{ name: 'Alice' }, { name: 'Bob' }],
-          venue: { name: 'NeurIPS' },
+          publishedIn: { name: 'NeurIPS' },
           topics: ['AI', 'ML'],
         },
         claims: [
@@ -441,9 +441,9 @@ describe('advanced tools', () => {
         ],
       });
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.paper.arxivId).toBe('2502.99999');
+      expect(parsed.paper.webUrl).toBe('https://arxiv.org/abs/2502.99999');
       expect(parsed.authors).toHaveLength(2);
-      expect(parsed.venueProject).not.toBeNull();
+      expect(parsed.publishedInProject).not.toBeNull();
       expect(parsed.topics).toHaveLength(2);
       expect(parsed.claims.count).toBe(2);
     });
@@ -459,14 +459,14 @@ describe('advanced tools', () => {
       expect(parsed.claims.count).toBe(1);
     });
 
-    it('derives arXiv URL from ID', async () => {
+    it('stores webUrl in output', async () => {
       const tools = await setupTools();
       const result = await tools.create_research_ontology_paper_and_claims.handler({
-        paper: { title: 'Test', arxivId: '2502.10855' },
+        paper: { title: 'Test', webUrl: 'https://arxiv.org/abs/2502.10855' },
         claims: [{ text: 'Claim' }],
       });
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.paper.arxivUrl).toBe('https://arxiv.org/abs/2502.10855');
+      expect(parsed.paper.webUrl).toBe('https://arxiv.org/abs/2502.10855');
     });
 
     it('disables topic creation when opted out', async () => {

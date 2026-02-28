@@ -27,7 +27,7 @@ Key spaces to know:
 
 Key type IDs:
 - Account type: `cb69723f7456471aa8ad3e93ddc3edfe`
-- Paper type: `1d2f7884e64e005ad897425c9879b0da`
+- Paper type: `5e24fb52856c4189a9716af4387b1b89`
 - Canonical Claim type: `96f859efa1ca4b229372c86ad58b694b`
 - Person type: `7ed45f2bc48b419e8e4664d5ff680b0d`
 - Topic type: `5ef5a5860f274d8e8f6c59ae5b3e89e2`
@@ -35,9 +35,7 @@ Key type IDs:
 
 All entity IDs use dashless 32-char hex format.
 
-Two GraphQL endpoints exist (different schemas):
-- `testnet-api.geobrowser.io/graphql` - Supports `spaceId` arg on `entitiesConnection`; used by standalone scripts
-- `api-testnet.geobrowser.io/graphql` - Filter-based queries; default for MCP server tools
+GraphQL endpoint: `testnet-api.geobrowser.io/graphql` (default for MCP server tools and standalone scripts)
 
 When reporting findings:
 - List entity names and IDs clearly

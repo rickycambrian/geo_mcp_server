@@ -4,7 +4,7 @@
  */
 
 const GEO_GRAPHQL_URL =
-  process.env.GEO_GRAPHQL_URL ?? 'https://api-testnet.geobrowser.io/graphql';
+  process.env.GEO_GRAPHQL_URL ?? 'https://testnet-api.geobrowser.io/graphql';
 
 // ── UUID format helpers ──────────────────────────────────────────────
 

@@ -2,7 +2,7 @@
  * Fetch-based GraphQL client for the Geo API.
  * Zero additional dependencies — uses native fetch.
  */
-const GEO_GRAPHQL_URL = process.env.GEO_GRAPHQL_URL ?? 'https://api-testnet.geobrowser.io/graphql';
+const GEO_GRAPHQL_URL = process.env.GEO_GRAPHQL_URL ?? 'https://testnet-api.geobrowser.io/graphql';
 // ── UUID format helpers ──────────────────────────────────────────────
 /**
  * Convert dashless 32-char hex to dashed UUID format.

@@ -41,7 +41,7 @@ Add to your MCP client config (e.g. Claude Code `.mcp.json`):
 
 The `GEO_PRIVATE_KEY` environment variable is optional at startup - you can also configure the wallet at runtime using the `configure_wallet` tool.
 `GEO_MCP_ALLOWED_PATHS` is optional and lets you allow additional directories for `read_local_file` and `create_knowledge_graph_from_file`. By default, only the current working directory is allowed.
-`GEO_GRAPHQL_URL` optionally overrides the GraphQL API endpoint (default: `https://api-testnet.geobrowser.io/graphql`).
+`GEO_GRAPHQL_URL` optionally overrides the GraphQL API endpoint (default: `https://testnet-api.geobrowser.io/graphql`).
 
 ## Quick Start
 

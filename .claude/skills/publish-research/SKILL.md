@@ -21,11 +21,11 @@ Publish a research paper and its extracted claims to the Geo knowledge graph usi
 
 4. **Provide paper metadata**:
    - `title` (required)
-   - `arxivId`, `publicationDate`, `authors`, `topics`, `venue`, `doi`, `keyContribution` (optional)
+   - `abstract`, `publishDate`, `authors`, `topics`, `publishedIn`, `webUrl` (optional)
 
 5. **Extract and provide claims**:
    - Each claim needs `text` (required)
-   - Optional: `sourceQuote`, `topics`
+   - Optional: `sourceQuote`, `topics`, `supportingArguments`, `opposingArguments`
 
 6. **Propose to DAO** (default, always use):
    - Call `propose_dao_edit` with `daoSpaceAddress`, `daoSpaceId`, and `name`
@@ -39,7 +39,7 @@ These are the production type IDs used by GeoBrowser and Knowledgebook. The `cre
 
 | Type    | ID                                 | Source                   |
 |---------|------------------------------------|--------------------------|
-| Paper   | `1d2f7884e64e005ad897425c9879b0da` | Research ontology space  |
+| Paper   | `5e24fb52856c4189a9716af4387b1b89` | Research ontology space  |
 | Claim   | `96f859efa1ca4b229372c86ad58b694b` | Research ontology space  |
 | Person  | `7ed45f2bc48b419e8e4664d5ff680b0d` | SystemIds.PERSON_TYPE    |
 | Topic   | `5ef5a5860f274d8e8f6c59ae5b3e89e2` | Research ontology space  |
@@ -49,26 +49,28 @@ These are the production type IDs used by GeoBrowser and Knowledgebook. The `cre
 
 | Property          | ID                                 | Data Type |
 |-------------------|------------------------------------|-----------|
-| arXiv URL         | `b1417e3a509237b8f32970b6bf6f227e` | Text      |
-| Publication date  | `3176c284b8653e6cfad174fb1ecd6af0` | Date      |
-| DOI               | `0c9ad4f6d0cd852634d7361eb685b881` | Text      |
-| Code URL          | `766386c7b6b1b77d4adac0ba8b5ba60d` | Text      |
-| Semantic Scholar  | `044660dd8984d7b46e11dfefa29eb8d4` | Text      |
-| Key contribution  | `875890d85e38caa08e325415d915b628` | Text      |
-| Authors           | `5c8a2a40986a29fe3430775cc2c0fa2e` | Relation  |
-| Venue             | `adb8047237cbc48a9bfe420b4cf8398f` | Relation  |
-| Related topics    | `806d52bc27e94c9193c057978b093351` | Relation  |
+| Abstract          | `1d274ed52372471289614a50168a37aa` | Text      |
+| Authors           | `91a9e2f6e51a48f7997661de8561b690` | Relation  |
 | Tags              | `257090341ba5406f94e4d4af90042fba` | Text      |
 | Web URL           | `412ff593e9154012a43d4c27ec5c68b6` | Text      |
+| Related topics    | `806d52bc27e94c9193c057978b093351` | Relation  |
+| Publish date      | `94e43fe8faf241009eb887ab4f999723` | Datetime  |
+| Published in      | `8b87530a67774d93a9aa8321b7f10019` | Relation  |
+| Related spaces    | `5b722cd361d6494e88871310566437ba` | Relation  |
 
 ## Claim Property IDs
 
-| Property          | ID                                 | Data Type |
-|-------------------|------------------------------------|-----------|
-| Sources           | `49c5d5e1679a4dbdbfd33f618f227c94` | Relation  |
-| Related topics    | `806d52bc27e94c9193c057978b093351` | Relation  |
-| Quotes            | `f9eeaf9d9eb741b1ac5d257c6e82e526` | Text      |
-| Tags              | `257090341ba5406f94e4d4af90042fba` | Text      |
+| Property                    | ID                                 | Data Type |
+|-----------------------------|------------------------------------|-----------|
+| Sources                     | `49c5d5e1679a4dbdbfd33f618f227c94` | Relation  |
+| Related topics              | `806d52bc27e94c9193c057978b093351` | Relation  |
+| Quotes that support claims  | `f9eeaf9d9eb741b1ac5d257c6e82e526` | Text      |
+| Tags                        | `257090341ba5406f94e4d4af90042fba` | Text      |
+| Supporting arguments        | `1dc6a843458848198e7a6e672268f811` | Text      |
+| Opposing arguments          | `4e6ec5d14292498a84e5f607ca1a08ce` | Text      |
+| Related people              | `5df8e4329cc54f038f854ac82e157ada` | Relation  |
+| Related projects            | `6e3503fab974460ea3dbab8af9a41427` | Relation  |
+| Related spaces              | `5b722cd361d6494e88871310566437ba` | Relation  |
 
 ## Modeling Rules
 

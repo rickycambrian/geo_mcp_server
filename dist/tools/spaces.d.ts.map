@@ -1,1 +1,1 @@
-{"version":3,"file":"spaces.d.ts","sourceRoot":"","sources":["../../src/tools/spaces.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,SAAS,EAAE,MAAM,yCAAyC,CAAC;AAYpE,OAAO,EAAE,KAAK,WAAW,EAAE,MAAM,qBAAqB,CAAC;AA0DvD,wBAAgB,kBAAkB,CAAC,MAAM,EAAE,SAAS,EAAE,OAAO,EAAE,WAAW,GAAG,IAAI,CAqgBhF"}
+{"version":3,"file":"spaces.d.ts","sourceRoot":"","sources":["../../src/tools/spaces.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,SAAS,EAAE,MAAM,yCAAyC,CAAC;AAYpE,OAAO,EAAE,KAAK,WAAW,EAAE,MAAM,qBAAqB,CAAC;AA4KvD,wBAAgB,kBAAkB,CAAC,MAAM,EAAE,SAAS,EAAE,OAAO,EAAE,WAAW,GAAG,IAAI,CA0iBhF"}

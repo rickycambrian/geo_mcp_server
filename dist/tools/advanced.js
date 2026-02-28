@@ -129,15 +129,15 @@ const CreateKnowledgeGraphInputSchema = z.object({
 const MAX_LOCAL_FILE_BYTES = 1_000_000;
 const MAX_LOCAL_FILE_PREVIEW_BYTES = 250_000;
 const DEFAULT_CANONICAL_CLAIM_TYPE_ID = '96f859efa1ca4b229372c86ad58b694b';
-// "Research ontology" IDs for publishing papers/claims using the minimal GeoBrowser schema.
-// Source: https://www.geobrowser.io/space/cc31e40f74231d530f1b5d0fc1cd94d8/6bd605f5269b41a4a5aaab571a77f325
+// "Research ontology" IDs for publishing papers/claims using the canonical GeoBrowser schema.
+// Source: verified from Geo knowledge graph on 2026-03-01
 //
 // Notes:
 // - Paper title and Claim text are stored in the entity `name` (implicit Name property).
 // - Most linking is done through Relation-typed properties using `create_entity.relations`.
 const RESEARCH_ONTOLOGY_IDS = {
     types: {
-        paper: '1d2f7884e64e005ad897425c9879b0da',
+        paper: '5e24fb52856c4189a9716af4387b1b89',
         claim: DEFAULT_CANONICAL_CLAIM_TYPE_ID,
         topic: '5ef5a5860f274d8e8f6c59ae5b3e89e2',
         person: SystemIds.PERSON_TYPE,
@@ -145,23 +145,24 @@ const RESEARCH_ONTOLOGY_IDS = {
     },
     properties: {
         // Paper properties
-        paperArxivUrl: 'b1417e3a509237b8f32970b6bf6f227e', // Text
-        paperPublicationDate: '3176c284b8653e6cfad174fb1ecd6af0', // Date
-        paperDoi: '0c9ad4f6d0cd852634d7361eb685b881', // Text
-        paperCodeUrl: '766386c7b6b1b77d4adac0ba8b5ba60d', // Text
-        paperSemanticScholarUrl: '044660dd8984d7b46e11dfefa29eb8d4', // Text
-        paperKeyContribution: '875890d85e38caa08e325415d915b628', // Text
-        paperAuthors: '5c8a2a40986a29fe3430775cc2c0fa2e', // Relation
-        paperVenue: 'adb8047237cbc48a9bfe420b4cf8398f', // Relation
-        paperRelatedTopics: '806d52bc27e94c9193c057978b093351', // Relation
+        paperAbstract: '1d274ed52372471289614a50168a37aa', // Text
+        paperAuthors: '91a9e2f6e51a48f7997661de8561b690', // Relation → Person,Project
         paperTags: '257090341ba5406f94e4d4af90042fba', // Text
         paperWebUrl: '412ff593e9154012a43d4c27ec5c68b6', // Text
-        paperCitationCount: '47ee87d8fac606d73e69d4c212804ffb', // Integer
+        paperRelatedTopics: '806d52bc27e94c9193c057978b093351', // Relation → Topic
+        paperPublishDate: '94e43fe8faf241009eb887ab4f999723', // Datetime
+        paperPublishedIn: '8b87530a67774d93a9aa8321b7f10019', // Relation → Project
+        paperRelatedSpaces: '5b722cd361d6494e88871310566437ba', // Relation → Space
         // Claim properties
-        claimSources: '49c5d5e1679a4dbdbfd33f618f227c94', // Relation
-        claimRelatedTopics: '806d52bc27e94c9193c057978b093351', // Relation (shared)
+        claimSources: '49c5d5e1679a4dbdbfd33f618f227c94', // Relation → Paper
+        claimRelatedTopics: '806d52bc27e94c9193c057978b093351', // Relation → Topic (shared)
         claimQuotes: 'f9eeaf9d9eb741b1ac5d257c6e82e526', // Text
         claimTags: '257090341ba5406f94e4d4af90042fba', // Text (shared with paper)
+        claimSupportingArguments: '1dc6a843458848198e7a6e672268f811', // Text
+        claimOpposingArguments: '4e6ec5d14292498a84e5f607ca1a08ce', // Text
+        claimRelatedPeople: '5df8e4329cc54f038f854ac82e157ada', // Relation → Person
+        claimRelatedProjects: '6e3503fab974460ea3dbab8af9a41427', // Relation → Project
+        claimRelatedSpaces: '5b722cd361d6494e88871310566437ba', // Relation → Space
     },
 };
 const CANONICAL_RESEARCH_SCHEMA_IDS = {
@@ -253,14 +254,10 @@ const OntologyProjectInputSchema = z.object({
 });
 const OntologyPaperInputSchema = z.object({
     title: z.string().min(1).describe('Paper title (stored as entity.name)'),
-    arxivId: z.string().optional().describe('arXiv ID without prefix (e.g. 2502.10855)'),
-    arxivUrl: z.string().optional().describe('arXiv URL (defaults to https://arxiv.org/abs/<id>)'),
-    publicationDate: z.string().optional().describe('YYYY-MM-DD or ISO datetime (stored as Date)'),
-    doi: z.string().optional(),
-    codeUrl: z.string().optional(),
-    semanticScholarUrl: z.string().optional(),
-    keyContribution: z.string().optional().describe('Short summary of the key contribution'),
-    venue: OntologyProjectInputSchema.optional().describe('Journal/publisher/venue (created as Project entity)'),
+    abstract: z.string().optional().describe('Paper abstract (stored via the Abstract property)'),
+    webUrl: z.string().optional().describe('URL for the paper (arXiv, DOI link, etc.)'),
+    publishDate: z.string().optional().describe('YYYY-MM-DD or ISO datetime (stored as Datetime)'),
+    publishedIn: OntologyProjectInputSchema.optional().describe('Journal/publisher/venue (created as Project entity)'),
     authors: z.array(OntologyAuthorInputSchema).optional().describe('Paper authors (created as Person entities)'),
     topics: z.array(z.string()).optional().describe('High-level topics (created as Topic entities)'),
 });
@@ -268,6 +265,8 @@ const OntologyClaimInputSchema = z.object({
     text: z.string().min(1).describe('Atomic claim text (stored as entity.name; full text also stored in description)'),
     topics: z.array(z.string()).optional().describe('Topic names this claim belongs to'),
     sourceQuote: z.string().optional().describe('Optional quote snippet from the paper supporting this claim'),
+    supportingArguments: z.string().optional().describe('Arguments that support this claim'),
+    opposingArguments: z.string().optional().describe('Arguments against this claim'),
 });
 function coerceIsoDatetime(input) {
     const trimmed = input.trim();
@@ -832,10 +831,10 @@ export function registerAdvancedTools(server, session) {
             .min(1)
             .max(200)
             .describe('Atomic claims to publish (Claim text stored as entity.name)'),
-        defaultVenueName: z
+        defaultPublishedInName: z
             .string()
             .optional()
-            .describe('Fallback Project name for the venue/publisher if paper.venue is omitted (default: "arXiv")'),
+            .describe('Fallback Project name for the publisher if paper.publishedIn is omitted (default: "arXiv")'),
         createTopics: z
             .boolean()
             .optional()
@@ -860,34 +859,29 @@ export function registerAdvancedTools(server, session) {
             .string()
             .optional()
             .describe('Optional prefix to include in each claim description'),
-    }, async ({ paper, claims, defaultVenueName, createTopics, linkPaperToTopics, linkClaimsToPaper, linkClaimsToTopics, paperDescription, claimDescriptionPrefix, }) => {
+    }, async ({ paper, claims, defaultPublishedInName, createTopics, linkPaperToTopics, linkClaimsToPaper, linkClaimsToTopics, paperDescription, claimDescriptionPrefix, }) => {
         try {
             const shouldCreateTopics = createTopics ?? true;
             const shouldLinkPaperToTopics = linkPaperToTopics ?? true;
             const shouldLinkClaimsToPaper = linkClaimsToPaper ?? true;
             const shouldLinkClaimsToTopics = linkClaimsToTopics ?? true;
-            // Normalize/derive arXiv metadata.
-            const arxivId = paper.arxivId?.replace(/^arxiv:/i, '').trim()
-                || (paper.arxivUrl ? (paper.arxivUrl.match(/arxiv\.org\/(?:abs|pdf)\/([^?#]+?)(?:\.pdf)?(?:$|[?#/])/i)?.[1] ?? '').trim() : '')
-                || undefined;
-            const arxivUrl = (paper.arxivUrl ?? '').trim()
-                || (arxivId ? `https://arxiv.org/abs/${arxivId}` : undefined);
-            const venueName = normalizeLabel(paper.venue?.name ?? defaultVenueName ?? (arxivId || arxivUrl ? 'arXiv' : ''));
-            // 1) Create Project (venue/publisher) if we have a name.
-            let venueProjectId = null;
-            if (venueName) {
-                const venueResult = Graph.createEntity({
-                    name: venueName,
+            const webUrl = (paper.webUrl ?? '').trim() || undefined;
+            const publishedInName = normalizeLabel(paper.publishedIn?.name ?? defaultPublishedInName ?? '');
+            // 1) Create Project (publisher) if we have a name.
+            let publishedInProjectId = null;
+            if (publishedInName) {
+                const pubResult = Graph.createEntity({
+                    name: publishedInName,
                     description: 'Research venue / publisher (Project).',
                     types: [RESEARCH_ONTOLOGY_IDS.types.project],
                 });
-                session.addOps(venueResult.ops, {
-                    id: venueResult.id,
+                session.addOps(pubResult.ops, {
+                    id: pubResult.id,
                     type: 'entity',
-                    name: venueName,
-                    opsCount: venueResult.ops.length,
+                    name: publishedInName,
+                    opsCount: pubResult.ops.length,
                 });
-                venueProjectId = venueResult.id;
+                publishedInProjectId = pubResult.id;
             }
             // 2) Create authors (Person entities).
             const authorIds = [];
@@ -944,42 +938,31 @@ export function registerAdvancedTools(server, session) {
             }
             const paperEntityName = normalizeLabel(paper.title);
             const derivedDescriptionParts = [];
-            if (arxivId)
-                derivedDescriptionParts.push(`arXiv:${arxivId}`);
-            if (arxivUrl)
-                derivedDescriptionParts.push(arxivUrl);
-            const publicationDate = paper.publicationDate ? coerceDate(paper.publicationDate) : undefined;
-            if (publicationDate)
-                derivedDescriptionParts.push(`Published: ${publicationDate}`);
-            if (venueName)
-                derivedDescriptionParts.push(`Venue: ${venueName}`);
+            if (webUrl)
+                derivedDescriptionParts.push(webUrl);
+            const publishDate = paper.publishDate ? coerceIsoDatetime(paper.publishDate) : undefined;
+            if (publishDate)
+                derivedDescriptionParts.push(`Published: ${publishDate}`);
+            if (publishedInName)
+                derivedDescriptionParts.push(`Published in: ${publishedInName}`);
             const derivedDescription = derivedDescriptionParts.join(' | ') || 'Research paper (Paper).';
             // 4) Create Paper.
             const paperValues = [];
-            if (arxivUrl) {
-                paperValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.paperArxivUrl, 'text', arxivUrl));
+            if (paper.abstract) {
+                paperValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.paperAbstract, 'text', paper.abstract));
             }
-            if (publicationDate) {
-                paperValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.paperPublicationDate, 'date', publicationDate));
+            if (webUrl) {
+                paperValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.paperWebUrl, 'text', webUrl));
             }
-            if (paper.doi) {
-                paperValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.paperDoi, 'text', paper.doi));
-            }
-            if (paper.codeUrl) {
-                paperValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.paperCodeUrl, 'text', paper.codeUrl));
-            }
-            if (paper.semanticScholarUrl) {
-                paperValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.paperSemanticScholarUrl, 'text', paper.semanticScholarUrl));
-            }
-            if (paper.keyContribution) {
-                paperValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.paperKeyContribution, 'text', paper.keyContribution));
+            if (publishDate) {
+                paperValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.paperPublishDate, 'datetime', publishDate));
             }
             const paperRelations = {};
             if (authorIds.length > 0) {
                 paperRelations[RESEARCH_ONTOLOGY_IDS.properties.paperAuthors] = authorIds.map((id) => ({ toEntity: id }));
             }
-            if (venueProjectId) {
-                paperRelations[RESEARCH_ONTOLOGY_IDS.properties.paperVenue] = { toEntity: venueProjectId };
+            if (publishedInProjectId) {
+                paperRelations[RESEARCH_ONTOLOGY_IDS.properties.paperPublishedIn] = { toEntity: publishedInProjectId };
             }
             if (shouldLinkPaperToTopics && topicNameToId.size > 0) {
                 paperRelations[RESEARCH_ONTOLOGY_IDS.properties.paperRelatedTopics] = [...topicNameToId.values()].map((id) => ({ toEntity: id }));
@@ -1023,11 +1006,17 @@ export function registerAdvancedTools(server, session) {
                     if (names.length > 0)
                         descParts.push(`Topics: ${names.join(', ')}`);
                 }
-                descParts.push(`Source: ${paperEntityName}${arxivId ? ` (arXiv:${arxivId})` : ''}`);
+                descParts.push(`Source: ${paperEntityName}`);
                 const claimDescription = descParts.filter(Boolean).join('\n\n');
                 const claimValues = [];
                 if (claim.sourceQuote) {
                     claimValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.claimQuotes, 'text', claim.sourceQuote));
+                }
+                if (claim.supportingArguments) {
+                    claimValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.claimSupportingArguments, 'text', claim.supportingArguments));
+                }
+                if (claim.opposingArguments) {
+                    claimValues.push(buildTypedValue(RESEARCH_ONTOLOGY_IDS.properties.claimOpposingArguments, 'text', claim.opposingArguments));
                 }
                 const claimRelations = {};
                 if (shouldLinkClaimsToPaper) {
@@ -1060,10 +1049,9 @@ export function registerAdvancedTools(server, session) {
                             paper: {
                                 id: paperResult.id,
                                 name: paperEntityName,
-                                arxivId: arxivId ?? null,
-                                arxivUrl: arxivUrl ?? null,
+                                webUrl: webUrl ?? null,
                             },
-                            venueProject: venueProjectId ? { id: venueProjectId, name: venueName } : null,
+                            publishedInProject: publishedInProjectId ? { id: publishedInProjectId, name: publishedInName } : null,
                             authors: authorIds,
                             topics: [...topicNameToId.entries()].map(([key, id]) => ({ key, id, name: topicKeyToName.get(key) ?? null })),
                             claims: {

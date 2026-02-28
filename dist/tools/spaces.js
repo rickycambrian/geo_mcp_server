@@ -1,7 +1,7 @@
 import { personalSpace, daoSpace, TESTNET_RPC_URL, Account, Graph, } from '@geoprotocol/geo-sdk';
-import { SpaceRegistryAbi } from '@geoprotocol/geo-sdk/abis';
+import { SpaceRegistryAbi, DaoSpaceAbi } from '@geoprotocol/geo-sdk/abis';
 import { TESTNET } from '@geoprotocol/geo-sdk/contracts';
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, http, encodeFunctionData, encodeAbiParameters } from 'viem';
 import { z } from 'zod';
 import { ensureWalletConfigured, normalizeAddress, normalizeBytes16Hex, } from '../utils/wallet.js';
 // Shared public client – created once per process instead of on every tool call.
@@ -18,6 +18,92 @@ function stableStringify(value) {
         return input;
     };
     return JSON.stringify(normalize(value));
+}
+// ── DAO auto-vote helpers (same pattern as clear-dao-space script) ────────
+// keccak256('GOVERNANCE.PROPOSAL_VOTED')
+const PROPOSAL_VOTED_ACTION = '0x4ebf5f29676cedf7e2e4d346a8433289278f95a9fda73691dc1ce24574d5819e';
+// keccak256('GOVERNANCE.PROPOSAL_EXECUTED')
+const PROPOSAL_EXECUTED_ACTION = '0x62a60c0a9681612871e0dafa0f24bb0c83cbdde8be5a6299979c88d382369e96';
+// DAOSpace VoteOption enum: None=0, Yes=1, No=2, Abstain=3
+const VoteOption = { None: 0, Yes: 1, No: 2, Abstain: 3 };
+function bytes16ToBytes32(b16) {
+    return ('0x' + b16.slice(2) + '0'.repeat(32));
+}
+/** Vote YES on a DAO proposal and auto-execute if threshold is met. */
+async function autoVoteAndExecute(smartAccountClient, callerSpaceId, daoSpaceIdHex, daoSpaceAddress, proposalId) {
+    if (!smartAccountClient)
+        throw new Error('Smart account client not available');
+    const callerSpaceIdHex = callerSpaceId.startsWith('0x')
+        ? callerSpaceId
+        : `0x${callerSpaceId}`;
+    const daoIdHex = daoSpaceIdHex.startsWith('0x')
+        ? daoSpaceIdHex
+        : `0x${daoSpaceIdHex}`;
+    const proposalIdHex = proposalId.startsWith('0x')
+        ? proposalId
+        : `0x${proposalId}`;
+    // 1. Vote YES via SpaceRegistryAbi.enter()
+    const voteData = encodeAbiParameters([
+        { type: 'bytes16', name: 'proposalId' },
+        { type: 'uint8', name: 'voteOption' },
+    ], [proposalIdHex, VoteOption.Yes]);
+    const voteCalldata = encodeFunctionData({
+        abi: SpaceRegistryAbi,
+        functionName: 'enter',
+        args: [
+            callerSpaceIdHex,
+            daoIdHex,
+            PROPOSAL_VOTED_ACTION,
+            bytes16ToBytes32(proposalIdHex),
+            voteData,
+            '0x',
+        ],
+    });
+    const voteTxHash = await smartAccountClient.sendTransaction({
+        to: TESTNET.SPACE_REGISTRY_ADDRESS,
+        data: voteCalldata,
+    });
+    await publicClient.waitForTransactionReceipt({ hash: voteTxHash });
+    // 2. Check if proposal auto-executed with the vote
+    const infoAfter = await publicClient.readContract({
+        address: daoSpaceAddress,
+        abi: DaoSpaceAbi,
+        functionName: 'getLatestProposalInformation',
+        args: [proposalIdHex],
+    });
+    const executed = infoAfter[0];
+    if (executed) {
+        return { voteTxHash, executed: true };
+    }
+    // 3. If not auto-executed, check threshold and execute manually
+    const thresholdReached = await publicClient.readContract({
+        address: daoSpaceAddress,
+        abi: DaoSpaceAbi,
+        functionName: 'isSupportThresholdReached',
+        args: [proposalIdHex],
+    });
+    if (thresholdReached) {
+        const execData = encodeAbiParameters([{ type: 'bytes16', name: 'proposalId' }], [proposalIdHex]);
+        const execCalldata = encodeFunctionData({
+            abi: SpaceRegistryAbi,
+            functionName: 'enter',
+            args: [
+                callerSpaceIdHex,
+                daoIdHex,
+                PROPOSAL_EXECUTED_ACTION,
+                bytes16ToBytes32(proposalIdHex),
+                execData,
+                '0x',
+            ],
+        });
+        const execTxHash = await smartAccountClient.sendTransaction({
+            to: TESTNET.SPACE_REGISTRY_ADDRESS,
+            data: execCalldata,
+        });
+        await publicClient.waitForTransactionReceipt({ hash: execTxHash });
+        return { voteTxHash, executed: true, execTxHash };
+    }
+    return { voteTxHash, executed: false };
 }
 async function ensureCallerSpace(session) {
     const ensured = await ensureWalletConfigured(session);
@@ -309,6 +395,14 @@ export function registerSpaceTools(server, session) {
                 data: calldata,
             });
             await publicClient.waitForTransactionReceipt({ hash: txHash });
+            // Auto-vote YES and execute so entities appear immediately
+            let voteResult;
+            try {
+                voteResult = await autoVoteAndExecute(smartAccountClient, normalizedCallerSpaceId, normalizedDaoSpaceId, normalizedDaoSpaceAddress, proposalId);
+            }
+            catch (voteErr) {
+                console.error(`Auto-vote failed for proposal ${proposalId}:`, voteErr);
+            }
             const opsProposed = opsToPropose.length;
             session.clear({ includeLastPublished: true });
             return {
@@ -321,6 +415,10 @@ export function registerSpaceTools(server, session) {
                             proposalId,
                             txHash,
                             opsProposed,
+                            voted: voteResult?.voteTxHash ? true : false,
+                            voteTxHash: voteResult?.voteTxHash,
+                            executed: voteResult?.executed ?? false,
+                            execTxHash: voteResult?.execTxHash,
                         }),
                     },
                 ],
@@ -430,6 +528,15 @@ export function registerSpaceTools(server, session) {
             });
             const txHash = await smartAccountClient.sendTransaction({ to, data: calldata });
             await publicClient.waitForTransactionReceipt({ hash: txHash });
+            // Auto-vote YES and execute the proposal so entities appear immediately
+            let voteResult;
+            try {
+                voteResult = await autoVoteAndExecute(smartAccountClient, normalizedCallerSpaceId, normalizedDaoSpaceId, normalizedDaoSpaceAddress, proposalId);
+            }
+            catch (voteErr) {
+                // Log but don't fail — the proposal was still created successfully
+                console.error(`Auto-vote failed for proposal ${proposalId}:`, voteErr);
+            }
             return {
                 content: [
                     {
@@ -441,6 +548,10 @@ export function registerSpaceTools(server, session) {
                             txHash,
                             editId,
                             cid,
+                            voted: voteResult?.voteTxHash ? true : false,
+                            voteTxHash: voteResult?.voteTxHash,
+                            executed: voteResult?.executed ?? false,
+                            execTxHash: voteResult?.execTxHash,
                         }),
                     },
                 ],

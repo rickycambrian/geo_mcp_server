@@ -112,7 +112,7 @@ Agent gateway auto-deploys when `.claude/agents/**` or `.claude/skills/**` chang
 
 - `GEO_PRIVATE_KEY` - Hex private key for wallet (optional, can use configure_wallet at runtime)
 - `GEO_MCP_ALLOWED_PATHS` - Comma-separated additional directories for file read tools
-- `GEO_GRAPHQL_URL` - Override GraphQL endpoint (default: `https://api-testnet.geobrowser.io/graphql`)
+- `GEO_GRAPHQL_URL` - Override GraphQL endpoint (default: `https://testnet-api.geobrowser.io/graphql`)
 
 ## Network
 
