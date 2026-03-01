@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Graph } from '@geoprotocol/geo-sdk';
 import { z } from 'zod';
 import type { EditSession } from '../state/session.js';
-import { ok, err } from './helpers.js';
+import { ok, err, coerceJsonArray, coerceJsonObject } from './helpers.js';
 
 const DataTypeEnum = z.enum([
   'TEXT',
@@ -105,12 +105,12 @@ export function registerGraphTools(server: McpServer, session: EditSession) {
     {
       name: z.string().describe('Name of the entity'),
       description: z.string().optional().describe('Description of the entity'),
-      types: z.array(z.string()).optional().describe('Array of type IDs to assign'),
+      types: z.preprocess(coerceJsonArray, z.array(z.string()).optional()).describe('Array of type IDs to assign'),
       cover: z.string().optional().describe('Image entity ID for cover'),
-      values: z.array(PropertyValueSchema).optional().describe('Property values to set'),
-      relations: z
+      values: z.preprocess(coerceJsonArray, z.array(PropertyValueSchema).optional()).describe('Property values to set'),
+      relations: z.preprocess(coerceJsonObject, z
         .record(z.string(), z.union([RelationValueSchema, z.array(RelationValueSchema)]))
-        .optional()
+        .optional())
         .describe('Relations keyed by relation property ID'),
     },
     async ({ name, description, types, cover, values, relations }) => {

@@ -14,4 +14,7 @@ export declare function err(error: unknown): {
     }[];
     isError: true;
 };
+export declare function coerceJsonObject(val: unknown): unknown;
+export declare function coerceJsonArray(val: unknown): unknown;
+export declare function coerceBool(val: unknown): unknown;
 //# sourceMappingURL=helpers.d.ts.map

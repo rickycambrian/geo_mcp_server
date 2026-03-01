@@ -8,6 +8,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import type { EditSession } from '../state/session.js';
+import { coerceJsonObject, coerceJsonArray, coerceBool } from './helpers.js';
 
 const GraphDataTypeEnum = z.enum([
   'TEXT',
@@ -294,7 +295,7 @@ const OntologyProjectInputSchema = z.object({
   name: z.string().min(1),
 });
 
-const OntologyPaperInputSchema = z.object({
+const OntologyPaperInputSchema = z.preprocess(coerceJsonObject, z.object({
   title: z.string().min(1).describe('Paper title (stored as entity.name)'),
   abstract: z.string().optional().describe('Paper abstract (stored via the Abstract property)'),
   webUrl: z.string().optional().describe('URL for the paper (arXiv, DOI link, etc.)'),
@@ -302,15 +303,15 @@ const OntologyPaperInputSchema = z.object({
   publishedIn: OntologyProjectInputSchema.optional().describe('Journal/publisher/venue (created as Project entity)'),
   authors: z.array(OntologyAuthorInputSchema).optional().describe('Paper authors (created as Person entities)'),
   topics: z.array(z.string()).optional().describe('High-level topics (created as Topic entities)'),
-});
+}));
 
-const OntologyClaimInputSchema = z.object({
+const OntologyClaimInputSchema = z.preprocess(coerceJsonObject, z.object({
   text: z.string().min(1).describe('Atomic claim text (stored as entity.name; full text also stored in description)'),
   topics: z.array(z.string()).optional().describe('Topic names this claim belongs to'),
   sourceQuote: z.string().optional().describe('Optional quote snippet from the paper supporting this claim'),
   supportingArguments: z.string().optional().describe('Arguments that support this claim'),
   opposingArguments: z.string().optional().describe('Arguments against this claim'),
-});
+}));
 
 function coerceIsoDatetime(input: string): string {
   const trimmed = input.trim();
@@ -972,30 +973,30 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
     'Create a Paper entity and Claim entities using the GeoBrowser "Research ontology" (Paper/Claim/Person/Topic/Project). This path is designed for Knowledgebook/GeoBrowser UIs that expect claims to be typed as the canonical Claim type.',
     {
       paper: OntologyPaperInputSchema.describe('Paper metadata (Paper title stored as entity.name)'),
-      claims: z
+      claims: z.preprocess(coerceJsonArray, z
         .array(OntologyClaimInputSchema)
         .min(1)
-        .max(200)
+        .max(200))
         .describe('Atomic claims to publish (Claim text stored as entity.name)'),
       defaultPublishedInName: z
         .string()
         .optional()
         .describe('Fallback Project name for the publisher if paper.publishedIn is omitted (default: "arXiv")'),
-      createTopics: z
+      createTopics: z.preprocess(coerceBool, z
         .boolean()
-        .optional()
+        .optional())
         .describe('If true, creates Topic entities for any referenced topics (default true)'),
-      linkPaperToTopics: z
+      linkPaperToTopics: z.preprocess(coerceBool, z
         .boolean()
-        .optional()
+        .optional())
         .describe('If true, links paper -> topics via Paper.Related topics (default true)'),
-      linkClaimsToPaper: z
+      linkClaimsToPaper: z.preprocess(coerceBool, z
         .boolean()
-        .optional()
+        .optional())
         .describe('If true, links claim -> paper via Claim.Sources (default true)'),
-      linkClaimsToTopics: z
+      linkClaimsToTopics: z.preprocess(coerceBool, z
         .boolean()
-        .optional()
+        .optional())
         .describe('If true, links claim -> topics via Claim.Related topics (default true)'),
       paperDescription: z
         .string()

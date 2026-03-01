@@ -10,7 +10,7 @@ import { registerWorkspaceTools } from './tools/workspace.js';
 export function createServer(): McpServer {
   const server = new McpServer({
     name: 'geo-mcp-server',
-    version: '1.4.0',
+    version: '1.4.1',
   });
 
   registerGraphTools(server, session);
