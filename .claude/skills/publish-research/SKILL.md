@@ -23,7 +23,12 @@ Publish a research paper and its extracted claims to the Geo knowledge graph usi
    - `title` (required)
    - `abstract`, `publishDate`, `authors`, `topics`, `publishedIn`, `webUrl` (optional)
 
-5. **Extract and provide claims**:
+5. **Extract and provide exactly 5 main claims** (following the gold-standard 5-claim structure):
+   - Position 1: Core problem/gap
+   - Position 2: Key technical contribution
+   - Position 3: Main empirical result
+   - Position 4: Generalizability/robustness
+   - Position 5: Broader implication
    - Each claim needs `text` (required)
    - Optional: `sourceQuote`, `topics`, `supportingArguments`, `opposingArguments`
 
@@ -72,8 +77,12 @@ These are the production type IDs used by GeoBrowser and Knowledgebook. The `cre
 | Related projects            | `6e3503fab974460ea3dbab8af9a41427` | Relation  |
 | Related spaces              | `5b722cd361d6494e88871310566437ba` | Relation  |
 
-## Modeling Rules
+## Content Policy
 
+- **Entity names**: Sentence-case (capitalize only first word + proper nouns)
+- **Author names**: No honorifics (Dr., Prof., etc.) — stripped automatically by the tool
+- **Paper description**: Uses the abstract (~250 chars), not metadata
+- **Claim description**: Does NOT repeat the claim text (which is the entity name)
 - Paper title is stored as the Paper entity `name` (not a property)
 - Claim text is stored as the Claim entity `name` (not a property)
 - Supporting quotes go in Claim.Quotes property or entity description

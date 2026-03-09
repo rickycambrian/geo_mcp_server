@@ -303,6 +303,11 @@ function shortText(input, max = 120) {
 function normalizeLabel(input) {
     return input.replace(/\\s+/g, ' ').trim();
 }
+function stripHonorifics(name) {
+    return name
+        .replace(/^(Dr\.?|Prof\.?|Professor|Mr\.?|Mrs\.?|Ms\.?|Sir|Dame|Lord|Rev\.?|President|Senator|Governor)\s+/i, '')
+        .trim();
+}
 export function registerAdvancedTools(server, session) {
     // ── generate_id ──────────────────────────────────────────────────────
     server.tool('generate_id', 'Generate one or more unique Geo knowledge graph IDs (dashless UUID v4)', {
@@ -888,7 +893,7 @@ export function registerAdvancedTools(server, session) {
             const authorIds = [];
             const authors = paper.authors ?? [];
             for (const author of authors) {
-                const name = normalizeLabel(author.name);
+                const name = stripHonorifics(normalizeLabel(author.name));
                 if (!name)
                     continue;
                 const authorResult = Graph.createEntity({
@@ -938,15 +943,23 @@ export function registerAdvancedTools(server, session) {
                 }
             }
             const paperEntityName = normalizeLabel(paper.title);
-            const derivedDescriptionParts = [];
-            if (webUrl)
-                derivedDescriptionParts.push(webUrl);
             const publishDate = paper.publishDate ? coerceIsoDatetime(paper.publishDate) : undefined;
-            if (publishDate)
-                derivedDescriptionParts.push(`Published: ${publishDate}`);
-            if (publishedInName)
-                derivedDescriptionParts.push(`Published in: ${publishedInName}`);
-            const derivedDescription = derivedDescriptionParts.join(' | ') || 'Research paper (Paper).';
+            // Use abstract as description (content policy: 1-2 sentences, ~50 words).
+            // Fall back to metadata string if no abstract provided.
+            let derivedDescription;
+            if (paper.abstract) {
+                derivedDescription = shortText(paper.abstract, 250);
+            }
+            else {
+                const derivedDescriptionParts = [];
+                if (webUrl)
+                    derivedDescriptionParts.push(webUrl);
+                if (publishDate)
+                    derivedDescriptionParts.push(`Published: ${publishDate}`);
+                if (publishedInName)
+                    derivedDescriptionParts.push(`Published in: ${publishedInName}`);
+                derivedDescription = derivedDescriptionParts.join(' | ') || 'Research paper (Paper).';
+            }
             // 4) Create Paper.
             const paperValues = [];
             if (paper.abstract) {
@@ -988,7 +1001,7 @@ export function registerAdvancedTools(server, session) {
                 const claimText = normalizeLabel(claim.text);
                 if (!claimText)
                     continue;
-                const claimName = shortText(claimText, 240);
+                const claimName = shortText(claimText, 500);
                 const topicIdsForClaim = [];
                 for (const raw of claim.topics ?? []) {
                     const key = normalizeLabel(raw).toLowerCase();
@@ -996,10 +1009,10 @@ export function registerAdvancedTools(server, session) {
                     if (id)
                         topicIdsForClaim.push(id);
                 }
+                // Content policy: description should NOT repeat the entity name.
                 const descParts = [];
                 if (claimDescriptionPrefix)
                     descParts.push(claimDescriptionPrefix.trim());
-                descParts.push(claimText);
                 if (claim.sourceQuote)
                     descParts.push(`Quote: ${shortText(claim.sourceQuote, 800)}`);
                 if (topicIdsForClaim.length > 0) {

@@ -344,6 +344,12 @@ function normalizeLabel(input: string): string {
   return input.replace(/\\s+/g, ' ').trim();
 }
 
+function stripHonorifics(name: string): string {
+  return name
+    .replace(/^(Dr\.?|Prof\.?|Professor|Mr\.?|Mrs\.?|Ms\.?|Sir|Dame|Lord|Rev\.?|President|Senator|Governor)\s+/i, '')
+    .trim();
+}
+
 export function registerAdvancedTools(server: McpServer, session: EditSession): void {
   // ── generate_id ──────────────────────────────────────────────────────
   server.tool(
@@ -1049,7 +1055,7 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
         const authorIds: string[] = [];
         const authors = paper.authors ?? [];
         for (const author of authors) {
-          const name = normalizeLabel(author.name);
+          const name = stripHonorifics(normalizeLabel(author.name));
           if (!name) continue;
           const authorResult = Graph.createEntity({
             name,
@@ -1099,12 +1105,19 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
         }
 
         const paperEntityName = normalizeLabel(paper.title);
-        const derivedDescriptionParts: string[] = [];
-        if (webUrl) derivedDescriptionParts.push(webUrl);
         const publishDate = paper.publishDate ? coerceIsoDatetime(paper.publishDate) : undefined;
-        if (publishDate) derivedDescriptionParts.push(`Published: ${publishDate}`);
-        if (publishedInName) derivedDescriptionParts.push(`Published in: ${publishedInName}`);
-        const derivedDescription = derivedDescriptionParts.join(' | ') || 'Research paper (Paper).';
+        // Use abstract as description (content policy: 1-2 sentences, ~50 words).
+        // Fall back to metadata string if no abstract provided.
+        let derivedDescription: string;
+        if (paper.abstract) {
+          derivedDescription = shortText(paper.abstract, 250);
+        } else {
+          const derivedDescriptionParts: string[] = [];
+          if (webUrl) derivedDescriptionParts.push(webUrl);
+          if (publishDate) derivedDescriptionParts.push(`Published: ${publishDate}`);
+          if (publishedInName) derivedDescriptionParts.push(`Published in: ${publishedInName}`);
+          derivedDescription = derivedDescriptionParts.join(' | ') || 'Research paper (Paper).';
+        }
 
         // 4) Create Paper.
         const paperValues: NonNullable<Parameters<typeof Graph.createEntity>[0]['values']> = [];
@@ -1149,7 +1162,7 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
         for (const claim of claims) {
           const claimText = normalizeLabel(claim.text);
           if (!claimText) continue;
-          const claimName = shortText(claimText, 240);
+          const claimName = shortText(claimText, 500);
 
           const topicIdsForClaim: string[] = [];
           for (const raw of claim.topics ?? []) {
@@ -1158,9 +1171,9 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
             if (id) topicIdsForClaim.push(id);
           }
 
+          // Content policy: description should NOT repeat the entity name.
           const descParts: string[] = [];
           if (claimDescriptionPrefix) descParts.push(claimDescriptionPrefix.trim());
-          descParts.push(claimText);
           if (claim.sourceQuote) descParts.push(`Quote: ${shortText(claim.sourceQuote, 800)}`);
           if (topicIdsForClaim.length > 0) {
             const names = (claim.topics ?? []).map(normalizeLabel).filter(Boolean);
