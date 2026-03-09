@@ -277,7 +277,7 @@ function coerceIsoDatetime(input) {
     if (trimmed.includes('T'))
         return trimmed;
     // Accept YYYY-MM-DD and convert to midnight UTC.
-    if (/^\\d{4}-\\d{2}-\\d{2}$/.test(trimmed))
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed))
         return `${trimmed}T00:00:00.000Z`;
     return trimmed;
 }
@@ -286,10 +286,10 @@ function coerceDate(input) {
     if (!trimmed)
         return trimmed;
     // Accept YYYY-MM-DD as-is.
-    if (/^\\d{4}-\\d{2}-\\d{2}$/.test(trimmed))
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed))
         return trimmed;
     // If an ISO datetime is provided, keep the date component.
-    const m = /^\\d{4}-\\d{2}-\\d{2}/.exec(trimmed);
+    const m = /^\d{4}-\d{2}-\d{2}/.exec(trimmed);
     if (m)
         return m[0];
     return trimmed;
