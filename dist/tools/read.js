@@ -49,13 +49,22 @@ const VALUE_FIELDS = `
   propertyId
   entityId
   spaceId
-  string
+  text
   language
   unit
   boolean
-  number
+  integer
+  float
+  decimal
+  date
+  datetime
   point
   time
+  bytes
+  property {
+    name
+    dataTypeName
+  }
 `;
 const RELATION_FIELDS = `
   id
@@ -67,6 +76,9 @@ const RELATION_FIELDS = `
   fromSpaceId
   toSpaceId
   verified
+  typeEntity { id name }
+  fromEntity { id name }
+  toEntity { id name }
 `;
 // ── Registration ─────────────────────────────────────────────────────
 export function registerReadTools(server) {
@@ -81,18 +93,23 @@ export function registerReadTools(server) {
         try {
             const limit = first ?? 20;
             const skip = offset ?? 0;
+            // Use server-side spaceId filter when available
+            const hasSpaceId = !!spaceId;
             const gql = `
-          query Search($query: String!, $first: Int, $offset: Int) {
-            search(query: $query, first: $first, offset: $offset) {
+          query Search($query: String!, $first: Int, $offset: Int${hasSpaceId ? ', $spaceId: UUID' : ''}) {
+            search(query: $query, first: $first, offset: $offset${hasSpaceId ? ', spaceId: $spaceId' : ''}) {
               ${ENTITY_SUMMARY_FIELDS}
             }
           }
         `;
-            const data = await query(gql, {
+            const variables = {
                 query: searchQuery,
                 first: limit,
                 offset: skip,
-            });
+            };
+            if (hasSpaceId)
+                variables.spaceId = normalizeToUUID(spaceId);
+            const data = await query(gql, variables);
             let results = (data.search ?? []).map((e) => dashlessIds(e, 'id', 'typeIds', 'spaceIds'));
             // Client-side type filter
             if (typeIds && typeIds.length > 0) {
@@ -100,14 +117,6 @@ export function registerReadTools(server) {
                 results = results.filter((e) => {
                     const entityTypes = e.typeIds;
                     return entityTypes?.some((t) => filterSet.has(String(t).toLowerCase()));
-                });
-            }
-            // Client-side space filter
-            if (spaceId) {
-                const normalizedSpaceId = spaceId.replace(/-/g, '').toLowerCase();
-                results = results.filter((e) => {
-                    const entitySpaces = e.spaceIds;
-                    return entitySpaces?.some((s) => String(s).toLowerCase() === normalizedSpaceId);
                 });
             }
             return ok({ results, totalCount: results.length });
@@ -165,24 +174,31 @@ export function registerReadTools(server) {
         try {
             const limit = first ?? 20;
             const skip = offset ?? 0;
-            // Build filter object
-            const filter = {};
-            if (name) {
-                filter.name = { includesInsensitive: name };
+            // spaceId and typeId are top-level args on entitiesConnection (not inside filter)
+            const spaceId = spaceIds?.[0] ? normalizeToUUID(spaceIds[0]) : undefined;
+            const typeId = typeIds?.[0] ? normalizeToUUID(typeIds[0]) : undefined;
+            // Name filter goes into the EntityFilter
+            const filter = name
+                ? { name: { includesInsensitive: name } }
+                : undefined;
+            // Build dynamic query args
+            const argDefs = ['$first: Int', '$offset: Int'];
+            const callArgs = ['first: $first', 'offset: $offset'];
+            if (spaceId) {
+                argDefs.push('$spaceId: UUID');
+                callArgs.push('spaceId: $spaceId');
             }
-            if (spaceIds && spaceIds.length > 0) {
-                const normalized = spaceIds.map(normalizeToUUID);
-                // anyEqualTo is most reliable for filtering entities by space membership
-                filter.spaceIds = { anyEqualTo: normalized[0] };
+            if (typeId) {
+                argDefs.push('$typeId: UUID');
+                callArgs.push('typeId: $typeId');
             }
-            if (typeIds && typeIds.length > 0) {
-                const normalized = typeIds.map(normalizeToUUID);
-                filter.typeIds = { anyEqualTo: normalized[0] };
+            if (filter) {
+                argDefs.push('$filter: EntityFilter');
+                callArgs.push('filter: $filter');
             }
-            const hasFilter = Object.keys(filter).length > 0;
             const gql = `
-          query ListEntities($first: Int, $offset: Int${hasFilter ? ', $filter: EntityFilter' : ''}) {
-            entitiesConnection${hasFilter ? '(first: $first, offset: $offset, filter: $filter)' : '(first: $first, offset: $offset)'} {
+          query ListEntities(${argDefs.join(', ')}) {
+            entitiesConnection(${callArgs.join(', ')}) {
               totalCount
               nodes {
                 ${ENTITY_SUMMARY_FIELDS}
@@ -192,7 +208,11 @@ export function registerReadTools(server) {
           }
         `;
             const variables = { first: limit, offset: skip };
-            if (hasFilter)
+            if (spaceId)
+                variables.spaceId = spaceId;
+            if (typeId)
+                variables.typeId = typeId;
+            if (filter)
                 variables.filter = filter;
             const data = await query(gql, variables);
             const entities = (data.entitiesConnection.nodes ?? []).map((e) => dashlessIds(e, 'id', 'typeIds', 'spaceIds'));
@@ -213,21 +233,22 @@ export function registerReadTools(server) {
             space(id: $id) {
               id
               type
-              daoAddress
-              spaceAddress
-              mainVotingAddress
-              membershipAddress
-              personalAddress
-              editorsConnection { totalCount }
-              membersConnection { totalCount }
+              address
+              editors { totalCount }
+              members { totalCount }
               proposalsConnection(first: 10, orderBy: [CREATED_AT_DESC]) {
                 totalCount
                 nodes {
                   id
+                  name
                   votingMode
                   startTime
                   endTime
+                  executedAt
                   createdAt
+                  yesCount
+                  noCount
+                  abstainCount
                 }
               }
             }
@@ -262,10 +283,9 @@ export function registerReadTools(server) {
               nodes {
                 id
                 type
-                daoAddress
-                spaceAddress
-                editorsConnection { totalCount }
-                membersConnection { totalCount }
+                address
+                editors { totalCount }
+                members { totalCount }
               }
             }
           }
@@ -362,6 +382,7 @@ export function registerReadTools(server) {
               totalCount
               nodes {
                 id
+                name
                 spaceId
                 proposedBy
                 votingMode
@@ -372,6 +393,9 @@ export function registerReadTools(server) {
                 executedAt
                 createdAt
                 createdAtBlock
+                yesCount
+                noCount
+                abstainCount
                 proposalVotesConnection { totalCount }
               }
             }
@@ -399,6 +423,7 @@ export function registerReadTools(server) {
           query GetProposal($id: UUID!) {
             proposal(id: $id) {
               id
+              name
               spaceId
               proposedBy
               votingMode
@@ -409,6 +434,9 @@ export function registerReadTools(server) {
               executedAt
               createdAt
               createdAtBlock
+              yesCount
+              noCount
+              abstainCount
               proposalVotesConnection {
                 totalCount
                 nodes {
