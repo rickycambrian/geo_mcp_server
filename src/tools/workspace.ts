@@ -83,6 +83,7 @@ export function registerWorkspaceTools(server: McpServer, session: EditSession):
       first: z.number().int().min(1).max(100).optional(),
       offset: z.number().int().min(0).optional(),
     },
+    { readOnlyHint: true },
     async ({ kind, name, spaceId, first, offset }) => {
       try {
         const typeId = getTypeId(kind);
@@ -154,6 +155,7 @@ export function registerWorkspaceTools(server: McpServer, session: EditSession):
       daoSpaceId: z.string().optional(),
       votingMode: z.enum(['FAST', 'SLOW']).optional(),
     },
+    { readOnlyHint: false },
     async ({
       kind,
       name,
@@ -288,6 +290,7 @@ export function registerWorkspaceTools(server: McpServer, session: EditSession):
       daoSpaceId: z.string().optional(),
       votingMode: z.enum(['FAST', 'SLOW']).optional(),
     },
+    { destructiveHint: true },
     async ({ entityId, kind, visibility, daoSpaceAddress, daoSpaceId, votingMode }) => {
       const ready = await ensureSpaceReady(session);
       if (!ready.ok || !session.walletAddress || !session.smartAccountClient || !session.spaceId) {

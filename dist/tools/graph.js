@@ -55,7 +55,7 @@ export function registerGraphTools(server, session) {
         name: z.string().describe('Name of the property'),
         dataType: DataTypeEnum.describe('Data type for the property'),
         description: z.string().optional().describe('Description of the property'),
-    }, async ({ name, dataType, description }) => {
+    }, { readOnlyHint: false }, async ({ name, dataType, description }) => {
         try {
             const { id, ops } = Graph.createProperty({ name, dataType, description });
             session.addOps(ops, { id, type: 'property', name, opsCount: ops.length });
@@ -70,7 +70,7 @@ export function registerGraphTools(server, session) {
         name: z.string().describe('Name of the type'),
         properties: z.array(z.string()).optional().describe('Array of property IDs to include'),
         description: z.string().optional().describe('Description of the type'),
-    }, async ({ name, properties, description }) => {
+    }, { readOnlyHint: false }, async ({ name, properties, description }) => {
         try {
             const { id, ops } = Graph.createType({ name, properties, description });
             session.addOps(ops, { id, type: 'type', name, opsCount: ops.length });
@@ -91,7 +91,7 @@ export function registerGraphTools(server, session) {
             .record(z.string(), z.union([RelationValueSchema, z.array(RelationValueSchema)]))
             .optional())
             .describe('Relations keyed by relation property ID'),
-    }, async ({ name, description, types, cover, values, relations }) => {
+    }, { readOnlyHint: false }, async ({ name, description, types, cover, values, relations }) => {
         try {
             const params = { name };
             if (description !== undefined)
@@ -127,7 +127,7 @@ export function registerGraphTools(server, session) {
         toEntity: z.string().describe('Target entity ID'),
         type: z.string().describe('Relation type entity ID'),
         position: z.string().optional().describe('Position string for ordering'),
-    }, async ({ fromEntity, toEntity, type, position }) => {
+    }, { readOnlyHint: false }, async ({ fromEntity, toEntity, type, position }) => {
         try {
             const { id, ops } = Graph.createRelation({ fromEntity, toEntity, type, position });
             session.addOps(ops, {
@@ -147,7 +147,7 @@ export function registerGraphTools(server, session) {
         url: z.string().describe('URL of the image to upload'),
         name: z.string().optional().describe('Name for the image entity'),
         description: z.string().optional().describe('Description of the image'),
-    }, async ({ url, name, description }) => {
+    }, { readOnlyHint: false }, async ({ url, name, description }) => {
         try {
             const { id, cid, ops } = await Graph.createImage({ url, name, description });
             session.addOps(ops, {
@@ -169,7 +169,7 @@ export function registerGraphTools(server, session) {
         description: z.string().optional().describe('New description for the entity'),
         values: z.array(PropertyValueSchema).optional().describe('Property values to set'),
         unset: z.array(UnsetPropertySchema).optional().describe('Properties to unset'),
-    }, async ({ id, name, description, values, unset }) => {
+    }, { readOnlyHint: false }, async ({ id, name, description, values, unset }) => {
         try {
             const params = { id };
             if (name !== undefined)
@@ -205,7 +205,7 @@ export function registerGraphTools(server, session) {
     // ── delete_entity ────────────────────────────────────────────────
     server.tool('delete_entity', 'Delete an entity from the knowledge graph', {
         id: z.string().describe('ID of the entity to delete'),
-    }, async ({ id }) => {
+    }, { destructiveHint: true }, async ({ id }) => {
         try {
             const result = Graph.deleteEntity({ id });
             session.addOps(result.ops, {
@@ -223,7 +223,7 @@ export function registerGraphTools(server, session) {
     // ── delete_relation ──────────────────────────────────────────────
     server.tool('delete_relation', 'Delete a relation from the knowledge graph', {
         id: z.string().describe('ID of the relation to delete'),
-    }, async ({ id }) => {
+    }, { destructiveHint: true }, async ({ id }) => {
         try {
             const result = Graph.deleteRelation({ id });
             session.addOps(result.ops, {

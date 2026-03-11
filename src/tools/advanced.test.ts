@@ -117,7 +117,8 @@ import { Graph } from '@geoprotocol/geo-sdk';
 function captureTools() {
   const tools: Record<string, { handler: Function }> = {};
   const mockServer = {
-    tool: (name: string, _desc: string, _schema: unknown, handler: Function) => {
+    tool: (name: string, _desc: string, _schema: unknown, ...rest: unknown[]) => {
+      const handler = rest.length > 1 ? rest[1] as Function : rest[0] as Function;
       tools[name] = { handler };
     },
   };

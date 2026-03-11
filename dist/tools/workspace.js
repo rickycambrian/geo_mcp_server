@@ -57,7 +57,7 @@ export function registerWorkspaceTools(server, session) {
         spaceId: z.string().optional().describe('Optional dashless space ID'),
         first: z.number().int().min(1).max(100).optional(),
         offset: z.number().int().min(0).optional(),
-    }, async ({ kind, name, spaceId, first, offset }) => {
+    }, { readOnlyHint: true }, async ({ kind, name, spaceId, first, offset }) => {
         try {
             const typeId = getTypeId(kind);
             const filter = {
@@ -115,7 +115,7 @@ export function registerWorkspaceTools(server, session) {
         daoSpaceAddress: z.string().optional(),
         daoSpaceId: z.string().optional(),
         votingMode: z.enum(['FAST', 'SLOW']).optional(),
-    }, async ({ kind, name, entityId, description, markdownContent, noteType, tags, status, priority, dueDate, visibility, daoSpaceAddress, daoSpaceId, votingMode, }) => {
+    }, { readOnlyHint: false }, async ({ kind, name, entityId, description, markdownContent, noteType, tags, status, priority, dueDate, visibility, daoSpaceAddress, daoSpaceId, votingMode, }) => {
         const ready = await ensureSpaceReady(session);
         if (!ready.ok || !session.walletAddress || !session.smartAccountClient || !session.spaceId) {
             return err(ready.ok ? 'Wallet/space not configured.' : ready.error);
@@ -214,7 +214,7 @@ export function registerWorkspaceTools(server, session) {
         daoSpaceAddress: z.string().optional(),
         daoSpaceId: z.string().optional(),
         votingMode: z.enum(['FAST', 'SLOW']).optional(),
-    }, async ({ entityId, kind, visibility, daoSpaceAddress, daoSpaceId, votingMode }) => {
+    }, { destructiveHint: true }, async ({ entityId, kind, visibility, daoSpaceAddress, daoSpaceId, votingMode }) => {
         const ready = await ensureSpaceReady(session);
         if (!ready.ok || !session.walletAddress || !session.smartAccountClient || !session.spaceId) {
             return err(ready.ok ? 'Wallet/space not configured.' : ready.error);

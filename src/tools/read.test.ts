@@ -16,7 +16,8 @@ import { query as mockQuery } from '../api/client.js';
 function captureTools() {
   const tools: Record<string, { handler: Function; schema: unknown }> = {};
   const mockServer = {
-    tool: (name: string, _desc: string, schema: unknown, handler: Function) => {
+    tool: (name: string, _desc: string, schema: unknown, ...rest: unknown[]) => {
+      const handler = rest.length > 1 ? rest[1] as Function : rest[0] as Function;
       tools[name] = { handler, schema };
     },
   };

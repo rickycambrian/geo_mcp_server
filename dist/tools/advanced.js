@@ -312,7 +312,7 @@ export function registerAdvancedTools(server, session) {
     // ── generate_id ──────────────────────────────────────────────────────
     server.tool('generate_id', 'Generate one or more unique Geo knowledge graph IDs (dashless UUID v4)', {
         count: z.number().int().min(1).max(100).optional().describe('Number of IDs to generate (default 1)'),
-    }, async ({ count }) => {
+    }, { readOnlyHint: true }, async ({ count }) => {
         const n = count ?? 1;
         const ids = Array.from({ length: n }, () => IdUtils.generate());
         return {
@@ -362,7 +362,7 @@ export function registerAdvancedTools(server, session) {
             propertyNames: t.propertyNames ?? t.properties ?? [],
         })))
             .describe('Types to create'),
-    }, async ({ properties, types }) => {
+    }, { readOnlyHint: false }, async ({ properties, types }) => {
         const propertyMap = new Map();
         const createdProperties = [];
         let totalOps = 0;
@@ -419,7 +419,7 @@ export function registerAdvancedTools(server, session) {
         schema: GraphSchemaInputSchema,
         entities: z.array(GraphEntityInputSchema).optional().describe('Entities to create'),
         relations: z.array(GraphRelationInputSchema).optional().describe('Relations between entities'),
-    }, async ({ schema, entities, relations }) => {
+    }, { readOnlyHint: false }, async ({ schema, entities, relations }) => {
         try {
             const result = createKnowledgeGraph(session, { schema, entities, relations });
             return {
@@ -459,7 +459,7 @@ export function registerAdvancedTools(server, session) {
             .enum(['text', 'base64'])
             .optional()
             .describe('Return mode for file content; use base64 for binary files'),
-    }, async ({ filePath, maxBytes, output }) => {
+    }, { readOnlyHint: true }, async ({ filePath, maxBytes, output }) => {
         try {
             const readResult = await readLocalFile(filePath, maxBytes, output ?? 'text');
             return {
@@ -499,7 +499,7 @@ export function registerAdvancedTools(server, session) {
             .boolean()
             .optional()
             .describe('If true, validates and summarizes payload without creating ops'),
-    }, async ({ filePath, maxBytes, validateOnly }) => {
+    }, { readOnlyHint: false }, async ({ filePath, maxBytes, validateOnly }) => {
         try {
             const readResult = await readLocalFile(filePath, maxBytes ?? MAX_LOCAL_FILE_BYTES, 'text');
             if (readResult.truncated) {
@@ -572,7 +572,7 @@ export function registerAdvancedTools(server, session) {
             value: z.union([z.string(), z.number(), z.boolean()]).describe('The value'),
         }))
             .describe('Values to add'),
-    }, async ({ entityId, values }) => {
+    }, { readOnlyHint: false }, async ({ entityId, values }) => {
         try {
             const typedValues = values.map((v) => buildTypedValue(v.property, v.type, v.value));
             const result = Graph.updateEntity({
@@ -645,7 +645,7 @@ export function registerAdvancedTools(server, session) {
             .string()
             .optional()
             .describe('Prefix for claim entity names (default "Claim: ")'),
-    }, async ({ paper, claims, createExtractedFromRelations, canonicalClaimTypeId, paperName, paperDescription, claimNamePrefix, }) => {
+    }, { readOnlyHint: false }, async ({ paper, claims, createExtractedFromRelations, canonicalClaimTypeId, paperName, paperDescription, claimNamePrefix, }) => {
         try {
             const canonicalClaimType = (canonicalClaimTypeId ?? process.env.GEO_CANONICAL_CLAIM_TYPE_ID ?? '').trim()
                 || DEFAULT_CANONICAL_CLAIM_TYPE_ID;
@@ -865,7 +865,7 @@ export function registerAdvancedTools(server, session) {
             .string()
             .optional()
             .describe('Optional prefix to include in each claim description'),
-    }, async ({ paper, claims, defaultPublishedInName, createTopics, linkPaperToTopics, linkClaimsToPaper, linkClaimsToTopics, paperDescription, claimDescriptionPrefix, }) => {
+    }, { readOnlyHint: false }, async ({ paper, claims, defaultPublishedInName, createTopics, linkPaperToTopics, linkClaimsToPaper, linkClaimsToTopics, paperDescription, claimDescriptionPrefix, }) => {
         try {
             const shouldCreateTopics = createTopics ?? true;
             const shouldLinkPaperToTopics = linkPaperToTopics ?? true;
@@ -1097,7 +1097,7 @@ export function registerAdvancedTools(server, session) {
         category: z
             .enum(['types', 'properties', 'data_types', 'all'])
             .describe('Category of system IDs to return'),
-    }, async ({ category }) => {
+    }, { readOnlyHint: true }, async ({ category }) => {
         const typeIds = {
             PERSON_TYPE: SystemIds.PERSON_TYPE,
             COMPANY_TYPE: SystemIds.COMPANY_TYPE,

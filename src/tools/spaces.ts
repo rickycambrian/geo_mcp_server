@@ -186,13 +186,14 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
   // ── configure_wallet ──────────────────────────────────────────────
   server.tool(
     'configure_wallet',
-    'Configure the wallet with a private key to enable publishing',
+    'Configure wallet to enable write operations. Without a wallet, the server runs in read-only mode with full query access.',
     {
       privateKey: z
         .string()
         .optional()
         .describe('Hex private key with 0x prefix (optional; if omitted uses GEO_PRIVATE_KEY secret)'),
     },
+    { idempotentHint: true },
     async ({ privateKey }) => {
       const ensured = await ensureWalletConfigured(session, privateKey);
       if (!ensured.ok) {
@@ -220,8 +221,9 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
   // ── setup_space ───────────────────────────────────────────────────
   server.tool(
     'setup_space',
-    'Ensure personal space exists and get space ID',
+    'Ensure personal space exists and get space ID. Requires configured wallet.',
     {},
+    { readOnlyHint: false },
     async () => {
       const ensured = await ensureWalletConfigured(session);
       if (!ensured.ok || !session.walletAddress || !session.smartAccountClient) {
@@ -299,6 +301,7 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
     'publish_edit',
     'Publish all accumulated ops as an edit to personal space',
     { name: z.string().describe('Name for the edit') },
+    { readOnlyHint: false },
     async ({ name }) => {
       const ensured = await ensureWalletConfigured(session);
       if (!ensured.ok || !session.smartAccountClient) {
@@ -407,6 +410,7 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
       daoSpaceId: z.string().describe('DAO space ID (0x hex bytes16)'),
       votingMode: z.enum(['FAST', 'SLOW']).default('FAST').describe('Voting mode'),
     },
+    { readOnlyHint: false },
     async ({ name, daoSpaceAddress, daoSpaceId, votingMode }) => {
       const ensured = await ensureWalletConfigured(session);
       if (!ensured.ok || !session.smartAccountClient) {
@@ -546,6 +550,7 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
       daoSpaceId: z.string().optional().describe('DAO space bytes16 ID (required for public)'),
       votingMode: z.enum(['FAST', 'SLOW']).optional().describe('Voting mode for DAO proposals'),
     },
+    { readOnlyHint: false },
     async ({
       name,
       description,
@@ -700,13 +705,17 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
     'get_session_status',
     'Get current session state',
     {},
+    { readOnlyHint: true },
     async () => {
       const status = session.getStatus();
       return {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify(status),
+            text: JSON.stringify({
+              ...status,
+              mode: status.walletConfigured ? 'full' : 'read-only',
+            }),
           },
         ],
       };
@@ -718,6 +727,7 @@ export function registerSpaceTools(server: McpServer, session: EditSession): voi
     'clear_session',
     'Clear all accumulated ops',
     {},
+    { readOnlyHint: true },
     async () => {
       const previousOpsCount = session.opsCount;
       const previousLastPublishedOpsCount = session.getLastPublishedOps().length;

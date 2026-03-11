@@ -139,12 +139,12 @@ async function ensureCallerSpace(session) {
 }
 export function registerSpaceTools(server, session) {
     // ── configure_wallet ──────────────────────────────────────────────
-    server.tool('configure_wallet', 'Configure the wallet with a private key to enable publishing', {
+    server.tool('configure_wallet', 'Configure wallet to enable write operations. Without a wallet, the server runs in read-only mode with full query access.', {
         privateKey: z
             .string()
             .optional()
             .describe('Hex private key with 0x prefix (optional; if omitted uses GEO_PRIVATE_KEY secret)'),
-    }, async ({ privateKey }) => {
+    }, { idempotentHint: true }, async ({ privateKey }) => {
         const ensured = await ensureWalletConfigured(session, privateKey);
         if (!ensured.ok) {
             return {
@@ -166,7 +166,7 @@ export function registerSpaceTools(server, session) {
         };
     });
     // ── setup_space ───────────────────────────────────────────────────
-    server.tool('setup_space', 'Ensure personal space exists and get space ID', {}, async () => {
+    server.tool('setup_space', 'Ensure personal space exists and get space ID. Requires configured wallet.', {}, { readOnlyHint: false }, async () => {
         const ensured = await ensureWalletConfigured(session);
         if (!ensured.ok || !session.walletAddress || !session.smartAccountClient) {
             return {
@@ -233,7 +233,7 @@ export function registerSpaceTools(server, session) {
         }
     });
     // ── publish_edit ──────────────────────────────────────────────────
-    server.tool('publish_edit', 'Publish all accumulated ops as an edit to personal space', { name: z.string().describe('Name for the edit') }, async ({ name }) => {
+    server.tool('publish_edit', 'Publish all accumulated ops as an edit to personal space', { name: z.string().describe('Name for the edit') }, { readOnlyHint: false }, async ({ name }) => {
         const ensured = await ensureWalletConfigured(session);
         if (!ensured.ok || !session.smartAccountClient) {
             return {
@@ -329,7 +329,7 @@ export function registerSpaceTools(server, session) {
         daoSpaceAddress: z.string().describe('DAO space contract address (0x hex)'),
         daoSpaceId: z.string().describe('DAO space ID (0x hex bytes16)'),
         votingMode: z.enum(['FAST', 'SLOW']).default('FAST').describe('Voting mode'),
-    }, async ({ name, daoSpaceAddress, daoSpaceId, votingMode }) => {
+    }, { readOnlyHint: false }, async ({ name, daoSpaceAddress, daoSpaceId, votingMode }) => {
         const ensured = await ensureWalletConfigured(session);
         if (!ensured.ok || !session.smartAccountClient) {
             return {
@@ -449,7 +449,7 @@ export function registerSpaceTools(server, session) {
         daoSpaceAddress: z.string().optional().describe('DAO space contract address (required for public)'),
         daoSpaceId: z.string().optional().describe('DAO space bytes16 ID (required for public)'),
         votingMode: z.enum(['FAST', 'SLOW']).optional().describe('Voting mode for DAO proposals'),
-    }, async ({ name, description, nodes, connections, workflowId, visibility, daoSpaceAddress, daoSpaceId, votingMode, }) => {
+    }, { readOnlyHint: false }, async ({ name, description, nodes, connections, workflowId, visibility, daoSpaceAddress, daoSpaceId, votingMode, }) => {
         const ensuredSpace = await ensureCallerSpace(session);
         if (!ensuredSpace.ok || !session.walletAddress || !session.smartAccountClient || !session.spaceId) {
             return {
@@ -572,19 +572,22 @@ export function registerSpaceTools(server, session) {
         }
     });
     // ── get_session_status ────────────────────────────────────────────
-    server.tool('get_session_status', 'Get current session state', {}, async () => {
+    server.tool('get_session_status', 'Get current session state', {}, { readOnlyHint: true }, async () => {
         const status = session.getStatus();
         return {
             content: [
                 {
                     type: 'text',
-                    text: JSON.stringify(status),
+                    text: JSON.stringify({
+                        ...status,
+                        mode: status.walletConfigured ? 'full' : 'read-only',
+                    }),
                 },
             ],
         };
     });
     // ── clear_session ─────────────────────────────────────────────────
-    server.tool('clear_session', 'Clear all accumulated ops', {}, async () => {
+    server.tool('clear_session', 'Clear all accumulated ops', {}, { readOnlyHint: true }, async () => {
         const previousOpsCount = session.opsCount;
         const previousLastPublishedOpsCount = session.getLastPublishedOps().length;
         session.clear({ includeLastPublished: true });

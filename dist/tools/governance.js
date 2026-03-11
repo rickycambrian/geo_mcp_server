@@ -16,7 +16,7 @@ export function registerGovernanceTools(server, session) {
             .boolean()
             .default(true)
             .describe('Attempt early execution if vote threshold is met'),
-    }, async ({ mainVotingAddress, proposalId, vote, tryEarlyExecution }) => {
+    }, { readOnlyHint: false }, async ({ mainVotingAddress, proposalId, vote, tryEarlyExecution }) => {
         try {
             const ensured = await ensureWalletConfigured(session);
             if (!ensured.ok || !session.smartAccountClient) {
@@ -45,7 +45,7 @@ export function registerGovernanceTools(server, session) {
         mainVotingAddress: z.string().describe('0x address of the MainVoting plugin contract'),
         editorAddress: z.string().describe('0x address of the editor to add'),
         ipfsUri: z.string().describe('ipfs:// metadata URI for the proposal'),
-    }, async ({ mainVotingAddress, editorAddress, ipfsUri }) => {
+    }, { readOnlyHint: false }, async ({ mainVotingAddress, editorAddress, ipfsUri }) => {
         try {
             const ensured = await ensureWalletConfigured(session);
             if (!ensured.ok || !session.smartAccountClient) {
@@ -74,7 +74,7 @@ export function registerGovernanceTools(server, session) {
         mainVotingAddress: z.string().describe('0x address of the MainVoting plugin contract'),
         editorAddress: z.string().describe('0x address of the editor to remove'),
         ipfsUri: z.string().describe('ipfs:// metadata URI for the proposal'),
-    }, async ({ mainVotingAddress, editorAddress, ipfsUri }) => {
+    }, { readOnlyHint: false }, async ({ mainVotingAddress, editorAddress, ipfsUri }) => {
         try {
             const ensured = await ensureWalletConfigured(session);
             if (!ensured.ok || !session.smartAccountClient) {
@@ -104,7 +104,7 @@ export function registerGovernanceTools(server, session) {
         spacePluginAddress: z.string().describe('0x address of the space plugin'),
         subspaceAddress: z.string().describe('0x address of the subspace DAO'),
         ipfsUri: z.string().describe('ipfs:// metadata URI for the proposal'),
-    }, async ({ mainVotingAddress, spacePluginAddress, subspaceAddress, ipfsUri }) => {
+    }, { readOnlyHint: false }, async ({ mainVotingAddress, spacePluginAddress, subspaceAddress, ipfsUri }) => {
         try {
             const ensured = await ensureWalletConfigured(session);
             if (!ensured.ok || !session.smartAccountClient) {
@@ -140,7 +140,7 @@ export function registerGovernanceTools(server, session) {
         spacePluginAddress: z.string().describe('0x address of the space plugin'),
         subspaceAddress: z.string().describe('0x address of the subspace DAO'),
         ipfsUri: z.string().describe('ipfs:// metadata URI for the proposal'),
-    }, async ({ mainVotingAddress, spacePluginAddress, subspaceAddress, ipfsUri }) => {
+    }, { readOnlyHint: false }, async ({ mainVotingAddress, spacePluginAddress, subspaceAddress, ipfsUri }) => {
         try {
             const ensured = await ensureWalletConfigured(session);
             if (!ensured.ok || !session.smartAccountClient) {

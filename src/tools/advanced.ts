@@ -358,6 +358,7 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
     {
       count: z.number().int().min(1).max(100).optional().describe('Number of IDs to generate (default 1)'),
     },
+    { readOnlyHint: true },
     async ({ count }) => {
       const n = count ?? 1;
       const ids = Array.from({ length: n }, () => IdUtils.generate());
@@ -418,6 +419,7 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
         )
         .describe('Types to create'),
     },
+    { readOnlyHint: false },
     async ({ properties, types }) => {
       const propertyMap = new Map<string, string>();
       const createdProperties: Array<{ name: string; id: string }> = [];
@@ -491,6 +493,7 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
       entities: z.array(GraphEntityInputSchema).optional().describe('Entities to create'),
       relations: z.array(GraphRelationInputSchema).optional().describe('Relations between entities'),
     },
+    { readOnlyHint: false },
     async ({ schema, entities, relations }) => {
       try {
         const result = createKnowledgeGraph(session, { schema, entities, relations });
@@ -536,6 +539,7 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
         .optional()
         .describe('Return mode for file content; use base64 for binary files'),
     },
+    { readOnlyHint: true },
     async ({ filePath, maxBytes, output }) => {
       try {
         const readResult = await readLocalFile(filePath, maxBytes, output ?? 'text');
@@ -581,6 +585,7 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
         .optional()
         .describe('If true, validates and summarizes payload without creating ops'),
     },
+    { readOnlyHint: false },
     async ({ filePath, maxBytes, validateOnly }) => {
       try {
         const readResult = await readLocalFile(filePath, maxBytes ?? MAX_LOCAL_FILE_BYTES, 'text');
@@ -672,6 +677,7 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
             )
             .describe('Values to add'),
     },
+    { readOnlyHint: false },
     async ({ entityId, values }) => {
       try {
         const typedValues = values.map((v) => buildTypedValue(v.property, v.type, v.value));
@@ -757,6 +763,7 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
         .optional()
         .describe('Prefix for claim entity names (default "Claim: ")'),
     },
+    { readOnlyHint: false },
     async ({
       paper,
       claims,
@@ -1013,6 +1020,7 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
         .optional()
         .describe('Optional prefix to include in each claim description'),
     },
+    { readOnlyHint: false },
     async ({
       paper,
       claims,
@@ -1270,6 +1278,7 @@ export function registerAdvancedTools(server: McpServer, session: EditSession): 
         .enum(['types', 'properties', 'data_types', 'all'])
         .describe('Category of system IDs to return'),
     },
+    { readOnlyHint: true },
     async ({ category }) => {
       const typeIds = {
         PERSON_TYPE: SystemIds.PERSON_TYPE,

@@ -67,6 +67,7 @@ export function registerGraphTools(server: McpServer, session: EditSession) {
       dataType: DataTypeEnum.describe('Data type for the property'),
       description: z.string().optional().describe('Description of the property'),
     },
+    { readOnlyHint: false },
     async ({ name, dataType, description }) => {
       try {
         const { id, ops } = Graph.createProperty({ name, dataType, description });
@@ -87,6 +88,7 @@ export function registerGraphTools(server: McpServer, session: EditSession) {
       properties: z.array(z.string()).optional().describe('Array of property IDs to include'),
       description: z.string().optional().describe('Description of the type'),
     },
+    { readOnlyHint: false },
     async ({ name, properties, description }) => {
       try {
         const { id, ops } = Graph.createType({ name, properties, description });
@@ -113,6 +115,7 @@ export function registerGraphTools(server: McpServer, session: EditSession) {
         .optional())
         .describe('Relations keyed by relation property ID'),
     },
+    { readOnlyHint: false },
     async ({ name, description, types, cover, values, relations }) => {
       try {
         const params: Record<string, unknown> = { name };
@@ -153,6 +156,7 @@ export function registerGraphTools(server: McpServer, session: EditSession) {
       type: z.string().describe('Relation type entity ID'),
       position: z.string().optional().describe('Position string for ordering'),
     },
+    { readOnlyHint: false },
     async ({ fromEntity, toEntity, type, position }) => {
       try {
         const { id, ops } = Graph.createRelation({ fromEntity, toEntity, type, position });
@@ -178,6 +182,7 @@ export function registerGraphTools(server: McpServer, session: EditSession) {
       name: z.string().optional().describe('Name for the image entity'),
       description: z.string().optional().describe('Description of the image'),
     },
+    { readOnlyHint: false },
     async ({ url, name, description }) => {
       try {
         const { id, cid, ops } = await Graph.createImage({ url, name, description });
@@ -205,6 +210,7 @@ export function registerGraphTools(server: McpServer, session: EditSession) {
       values: z.array(PropertyValueSchema).optional().describe('Property values to set'),
       unset: z.array(UnsetPropertySchema).optional().describe('Properties to unset'),
     },
+    { readOnlyHint: false },
     async ({ id, name, description, values, unset }) => {
       try {
         const params: Record<string, unknown> = { id };
@@ -246,6 +252,7 @@ export function registerGraphTools(server: McpServer, session: EditSession) {
     {
       id: z.string().describe('ID of the entity to delete'),
     },
+    { destructiveHint: true },
     async ({ id }) => {
       try {
         const result = Graph.deleteEntity({ id });
@@ -269,6 +276,7 @@ export function registerGraphTools(server: McpServer, session: EditSession) {
     {
       id: z.string().describe('ID of the relation to delete'),
     },
+    { destructiveHint: true },
     async ({ id }) => {
       try {
         const result = Graph.deleteRelation({ id });

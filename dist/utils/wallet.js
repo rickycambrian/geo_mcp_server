@@ -40,7 +40,7 @@ export async function ensureWalletConfigured(session, privateKeyOverride) {
     if (!privateKey) {
         return {
             ok: false,
-            error: 'Wallet not configured. Configure GEO_PRIVATE_KEY secret (recommended) or call configure_wallet with a privateKey.',
+            error: 'Wallet not configured — server is in read-only mode. To enable write operations, set GEO_PRIVATE_KEY or call configure_wallet with a privateKey.',
         };
     }
     try {

@@ -28,6 +28,7 @@ export function registerGovernanceTools(server: McpServer, session: EditSession)
         .default(true)
         .describe('Attempt early execution if vote threshold is met'),
     },
+    { readOnlyHint: false },
     async ({ mainVotingAddress, proposalId, vote, tryEarlyExecution }) => {
       try {
         const ensured = await ensureWalletConfigured(session);
@@ -67,6 +68,7 @@ export function registerGovernanceTools(server: McpServer, session: EditSession)
       editorAddress: z.string().describe('0x address of the editor to add'),
       ipfsUri: z.string().describe('ipfs:// metadata URI for the proposal'),
     },
+    { readOnlyHint: false },
     async ({ mainVotingAddress, editorAddress, ipfsUri }) => {
       try {
         const ensured = await ensureWalletConfigured(session);
@@ -106,6 +108,7 @@ export function registerGovernanceTools(server: McpServer, session: EditSession)
       editorAddress: z.string().describe('0x address of the editor to remove'),
       ipfsUri: z.string().describe('ipfs:// metadata URI for the proposal'),
     },
+    { readOnlyHint: false },
     async ({ mainVotingAddress, editorAddress, ipfsUri }) => {
       try {
         const ensured = await ensureWalletConfigured(session);
@@ -146,6 +149,7 @@ export function registerGovernanceTools(server: McpServer, session: EditSession)
       subspaceAddress: z.string().describe('0x address of the subspace DAO'),
       ipfsUri: z.string().describe('ipfs:// metadata URI for the proposal'),
     },
+    { readOnlyHint: false },
     async ({ mainVotingAddress, spacePluginAddress, subspaceAddress, ipfsUri }) => {
       try {
         const ensured = await ensureWalletConfigured(session);
@@ -192,6 +196,7 @@ export function registerGovernanceTools(server: McpServer, session: EditSession)
       subspaceAddress: z.string().describe('0x address of the subspace DAO'),
       ipfsUri: z.string().describe('ipfs:// metadata URI for the proposal'),
     },
+    { readOnlyHint: false },
     async ({ mainVotingAddress, spacePluginAddress, subspaceAddress, ipfsUri }) => {
       try {
         const ensured = await ensureWalletConfigured(session);

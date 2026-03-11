@@ -77,7 +77,7 @@ export function registerReadTools(server) {
         first: z.number().int().min(1).max(100).optional().describe('Max results to return (default 20)'),
         offset: z.number().int().min(0).optional().describe('Offset for pagination (default 0)'),
         typeIds: z.array(z.string()).optional().describe('Client-side filter: only return entities matching these type IDs'),
-    }, async ({ query: searchQuery, spaceId, first, offset, typeIds }) => {
+    }, { readOnlyHint: true }, async ({ query: searchQuery, spaceId, first, offset, typeIds }) => {
         try {
             const limit = first ?? 20;
             const skip = offset ?? 0;
@@ -119,7 +119,7 @@ export function registerReadTools(server) {
     // ── 2. get_entity ──────────────────────────────────────────────────
     server.tool('get_entity', 'Get full details of a single entity by ID, including values, relations, backlinks, and types.', {
         id: z.string().describe('Entity ID (dashless hex)'),
-    }, async ({ id }) => {
+    }, { readOnlyHint: true }, async ({ id }) => {
         try {
             const uuid = normalizeToUUID(id);
             const gql = `
@@ -161,7 +161,7 @@ export function registerReadTools(server) {
         spaceIds: z.array(z.string()).optional().describe('Filter by space IDs (dashless hex)'),
         typeIds: z.array(z.string()).optional().describe('Filter by type IDs (dashless hex)'),
         name: z.string().optional().describe('Case-insensitive name substring filter'),
-    }, async ({ first, offset, spaceIds, typeIds, name }) => {
+    }, { readOnlyHint: true }, async ({ first, offset, spaceIds, typeIds, name }) => {
         try {
             const limit = first ?? 20;
             const skip = offset ?? 0;
@@ -205,7 +205,7 @@ export function registerReadTools(server) {
     // ── 4. get_space ───────────────────────────────────────────────────
     server.tool('get_space', 'Get details of a single space by ID, including editor/member counts and recent proposals.', {
         id: z.string().describe('Space ID (dashless hex)'),
-    }, async ({ id }) => {
+    }, { readOnlyHint: true }, async ({ id }) => {
         try {
             const uuid = normalizeToUUID(id);
             const gql = `
@@ -248,7 +248,7 @@ export function registerReadTools(server) {
         first: z.number().int().min(1).max(50).optional().describe('Max results (default 20)'),
         offset: z.number().int().min(0).optional().describe('Offset for pagination (default 0)'),
         type: z.enum(['PERSONAL', 'PUBLIC', 'DAO']).optional().describe('Filter by space type (PUBLIC maps to DAO)'),
-    }, async ({ first, offset, type }) => {
+    }, { readOnlyHint: true }, async ({ first, offset, type }) => {
         try {
             const limit = first ?? 20;
             const skip = offset ?? 0;
@@ -285,7 +285,7 @@ export function registerReadTools(server) {
     // ── 6. get_type ────────────────────────────────────────────────────
     server.tool('get_type', 'Get details of a type definition by ID. Types are entities, so this returns the entity with its values and properties.', {
         id: z.string().describe('Type ID (dashless hex)'),
-    }, async ({ id }) => {
+    }, { readOnlyHint: true }, async ({ id }) => {
         try {
             const uuid = normalizeToUUID(id);
             const gql = `
@@ -322,7 +322,7 @@ export function registerReadTools(server) {
         spaceId: z.string().describe('Space ID (dashless hex)'),
         first: z.number().int().min(1).max(100).optional().describe('Max results (default 20)'),
         offset: z.number().int().min(0).optional().describe('Offset for pagination (default 0)'),
-    }, async ({ spaceId, first, offset }) => {
+    }, { readOnlyHint: true }, async ({ spaceId, first, offset }) => {
         try {
             const uuid = normalizeToUUID(spaceId);
             const limit = first ?? 20;
@@ -351,7 +351,7 @@ export function registerReadTools(server) {
         spaceId: z.string().describe('Space ID (dashless hex)'),
         first: z.number().int().min(1).max(50).optional().describe('Max results (default 20)'),
         offset: z.number().int().min(0).optional().describe('Offset for pagination (default 0)'),
-    }, async ({ spaceId, first, offset }) => {
+    }, { readOnlyHint: true }, async ({ spaceId, first, offset }) => {
         try {
             const uuid = normalizeToUUID(spaceId);
             const limit = first ?? 20;
@@ -392,7 +392,7 @@ export function registerReadTools(server) {
     // ── 9. get_proposal ────────────────────────────────────────────────
     server.tool('get_proposal', 'Get full details of a single proposal by ID, including vote breakdown.', {
         id: z.string().describe('Proposal ID (dashless hex)'),
-    }, async ({ id }) => {
+    }, { readOnlyHint: true }, async ({ id }) => {
         try {
             const uuid = normalizeToUUID(id);
             const gql = `
@@ -436,7 +436,7 @@ export function registerReadTools(server) {
         proposalId: z.string().describe('Proposal ID (dashless hex)'),
         first: z.number().int().min(1).max(100).optional().describe('Max results (default 20)'),
         offset: z.number().int().min(0).optional().describe('Offset for pagination (default 0)'),
-    }, async ({ proposalId, first, offset }) => {
+    }, { readOnlyHint: true }, async ({ proposalId, first, offset }) => {
         try {
             const uuid = normalizeToUUID(proposalId);
             const limit = first ?? 20;
