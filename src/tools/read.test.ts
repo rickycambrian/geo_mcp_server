@@ -229,4 +229,257 @@ describe('read tools', () => {
       expect(parsed.totalCount).toBe(1);
     });
   });
+
+  describe('get_page_content', () => {
+    it('returns ordered text blocks for an entity', async () => {
+      const tools = await setupTools();
+
+      // First call: entity query returning relations with two Blocks
+      (mockQuery as any).mockResolvedValueOnce({
+        entity: {
+          id: 'aabbccdd-1122-3344-5566-778899aabbcc',
+          name: 'Test Page',
+          relationsList: [
+            {
+              id: 'rel-1',
+              toEntityId: '11111111-1111-1111-1111-111111111111',
+              typeId: 'blocks-type-id',
+              position: 'b',
+              typeEntity: { id: 'blocks-type-id', name: 'Blocks' },
+              toEntity: { id: '11111111-1111-1111-1111-111111111111', name: 'Block B' },
+            },
+            {
+              id: 'rel-2',
+              toEntityId: '22222222-2222-2222-2222-222222222222',
+              typeId: 'blocks-type-id',
+              position: 'a',
+              typeEntity: { id: 'blocks-type-id', name: 'Blocks' },
+              toEntity: { id: '22222222-2222-2222-2222-222222222222', name: 'Block A' },
+            },
+          ],
+        },
+      });
+
+      // Second call: batch query for block entities
+      (mockQuery as any).mockResolvedValueOnce({
+        block_0: {
+          id: '22222222-2222-2222-2222-222222222222',
+          name: 'Block A',
+          valuesList: [
+            { id: 'v1', text: '# Introduction\nWelcome to Geo.', property: { name: 'Markdown content' } },
+          ],
+        },
+        block_1: {
+          id: '11111111-1111-1111-1111-111111111111',
+          name: 'Block B',
+          valuesList: [
+            { id: 'v2', text: '## Chapter 1\nThis is the first chapter.', property: { name: 'Markdown content' } },
+          ],
+        },
+      });
+
+      const result = await tools.get_page_content.handler({ entityId: 'aabbccdd11223344556677889 9aabbcc'.replace(/ /g, '') });
+      const parsed = JSON.parse(result.content[0].text);
+
+      expect(parsed.name).toBe('Test Page');
+      expect(parsed.blocks).toHaveLength(2);
+      // Sorted by position: 'a' before 'b'
+      expect(parsed.blocks[0].position).toBe('a');
+      expect(parsed.blocks[0].type).toBe('text');
+      expect(parsed.blocks[0].content).toBe('# Introduction\nWelcome to Geo.');
+      expect(parsed.blocks[0].name).toBe('Block A');
+
+      expect(parsed.blocks[1].position).toBe('b');
+      expect(parsed.blocks[1].type).toBe('text');
+      expect(parsed.blocks[1].content).toBe('## Chapter 1\nThis is the first chapter.');
+      expect(parsed.blocks[1].name).toBe('Block B');
+    });
+
+    it('returns mixed text and image blocks', async () => {
+      const tools = await setupTools();
+
+      (mockQuery as any).mockResolvedValueOnce({
+        entity: {
+          id: 'aabbccdd-1122-3344-5566-778899aabbcc',
+          name: 'Page with Images',
+          relationsList: [
+            {
+              id: 'rel-1',
+              toEntityId: '11111111-1111-1111-1111-111111111111',
+              typeId: 'blocks-type-id',
+              position: 'a',
+              typeEntity: { id: 'blocks-type-id', name: 'Blocks' },
+              toEntity: { id: '11111111-1111-1111-1111-111111111111', name: 'Text Block' },
+            },
+            {
+              id: 'rel-2',
+              toEntityId: '22222222-2222-2222-2222-222222222222',
+              typeId: 'blocks-type-id',
+              position: 'b',
+              typeEntity: { id: 'blocks-type-id', name: 'Blocks' },
+              toEntity: { id: '22222222-2222-2222-2222-222222222222', name: 'Image Block' },
+            },
+            {
+              id: 'rel-3',
+              toEntityId: '33333333-3333-3333-3333-333333333333',
+              typeId: 'blocks-type-id',
+              position: 'c',
+              typeEntity: { id: 'blocks-type-id', name: 'Blocks' },
+              toEntity: { id: '33333333-3333-3333-3333-333333333333', name: 'Another Text Block' },
+            },
+          ],
+        },
+      });
+
+      (mockQuery as any).mockResolvedValueOnce({
+        block_0: {
+          id: '11111111-1111-1111-1111-111111111111',
+          name: 'Text Block',
+          valuesList: [
+            { id: 'v1', text: 'Some markdown text.', property: { name: 'Markdown content' } },
+          ],
+        },
+        block_1: {
+          id: '22222222-2222-2222-2222-222222222222',
+          name: 'Image Block',
+          valuesList: [
+            { id: 'v2', text: null, property: { name: 'Image URL' } },
+          ],
+        },
+        block_2: {
+          id: '33333333-3333-3333-3333-333333333333',
+          name: 'Another Text Block',
+          valuesList: [
+            { id: 'v3', text: 'More markdown.', property: { name: 'Markdown content' } },
+          ],
+        },
+      });
+
+      const result = await tools.get_page_content.handler({ entityId: 'aabbccdd112233445566778899aabbcc' });
+      const parsed = JSON.parse(result.content[0].text);
+
+      expect(parsed.blocks).toHaveLength(3);
+      expect(parsed.blocks[0].type).toBe('text');
+      expect(parsed.blocks[0].content).toBe('Some markdown text.');
+
+      expect(parsed.blocks[1].type).toBe('image');
+      expect(parsed.blocks[1].content).toBeNull();
+
+      expect(parsed.blocks[2].type).toBe('text');
+      expect(parsed.blocks[2].content).toBe('More markdown.');
+    });
+
+    it('returns empty blocks array when entity has no Blocks relations', async () => {
+      const tools = await setupTools();
+
+      (mockQuery as any).mockResolvedValueOnce({
+        entity: {
+          id: 'aabbccdd-1122-3344-5566-778899aabbcc',
+          name: 'Empty Page',
+          relationsList: [
+            {
+              id: 'rel-1',
+              toEntityId: '11111111-1111-1111-1111-111111111111',
+              typeId: 'some-type-id',
+              position: 'a',
+              typeEntity: { id: 'some-type-id', name: 'SomeOtherRelation' },
+              toEntity: { id: '11111111-1111-1111-1111-111111111111', name: 'Not a Block' },
+            },
+          ],
+        },
+      });
+
+      const result = await tools.get_page_content.handler({ entityId: 'aabbccdd112233445566778899aabbcc' });
+      const parsed = JSON.parse(result.content[0].text);
+
+      expect(parsed.name).toBe('Empty Page');
+      expect(parsed.blocks).toEqual([]);
+      // Should not have made a second query for batch blocks
+      expect(mockQuery).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns block with null content when block entity has no Markdown content', async () => {
+      const tools = await setupTools();
+
+      (mockQuery as any).mockResolvedValueOnce({
+        entity: {
+          id: 'aabbccdd-1122-3344-5566-778899aabbcc',
+          name: 'Page with Missing Content',
+          relationsList: [
+            {
+              id: 'rel-1',
+              toEntityId: '11111111-1111-1111-1111-111111111111',
+              typeId: 'blocks-type-id',
+              position: 'a',
+              typeEntity: { id: 'blocks-type-id', name: 'Blocks' },
+              toEntity: { id: '11111111-1111-1111-1111-111111111111', name: 'Block Without MD' },
+            },
+          ],
+        },
+      });
+
+      // Block entity exists but has no valuesList entries with "Markdown content"
+      (mockQuery as any).mockResolvedValueOnce({
+        block_0: {
+          id: '11111111-1111-1111-1111-111111111111',
+          name: 'Block Without MD',
+          valuesList: [
+            { id: 'v1', text: 'some value', property: { name: 'Description' } },
+          ],
+        },
+      });
+
+      const result = await tools.get_page_content.handler({ entityId: 'aabbccdd112233445566778899aabbcc' });
+      const parsed = JSON.parse(result.content[0].text);
+
+      expect(parsed.blocks).toHaveLength(1);
+      expect(parsed.blocks[0].type).toBe('image');
+      expect(parsed.blocks[0].content).toBeNull();
+      expect(parsed.blocks[0].entityId).toBe('11111111111111111111111111111111');
+      expect(parsed.blocks[0].name).toBe('Block Without MD');
+    });
+
+    it('returns error when entity is not found', async () => {
+      const tools = await setupTools();
+
+      (mockQuery as any).mockResolvedValueOnce({ entity: null });
+
+      const result = await tools.get_page_content.handler({ entityId: 'aabbccdd112233445566778899aabbcc' });
+      expect(result.isError).toBe(true);
+    });
+
+    it('handles block entity not found in batch query', async () => {
+      const tools = await setupTools();
+
+      (mockQuery as any).mockResolvedValueOnce({
+        entity: {
+          id: 'aabbccdd-1122-3344-5566-778899aabbcc',
+          name: 'Page with Missing Block',
+          relationsList: [
+            {
+              id: 'rel-1',
+              toEntityId: '11111111-1111-1111-1111-111111111111',
+              typeId: 'blocks-type-id',
+              position: 'a',
+              typeEntity: { id: 'blocks-type-id', name: 'Blocks' },
+              toEntity: { id: '11111111-1111-1111-1111-111111111111', name: 'Missing Block' },
+            },
+          ],
+        },
+      });
+
+      // Batch query returns null for the block (entity deleted or inaccessible)
+      (mockQuery as any).mockResolvedValueOnce({
+        block_0: null,
+      });
+
+      const result = await tools.get_page_content.handler({ entityId: 'aabbccdd112233445566778899aabbcc' });
+      const parsed = JSON.parse(result.content[0].text);
+
+      expect(parsed.blocks).toHaveLength(1);
+      expect(parsed.blocks[0].type).toBe('text');
+      expect(parsed.blocks[0].content).toBeNull();
+      expect(parsed.blocks[0].name).toBe('Missing Block');
+    });
+  });
 });
