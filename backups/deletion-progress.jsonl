@@ -33,3 +33,10 @@
 {"timestamp":"2026-02-23T01:10:22.777Z","batchSize":5000,"entitiesBefore":42117,"relationsBefore":0,"entitiesAfter":193,"relationsAfter":0,"opsAttempted":41924,"batchesCompleted":9,"batchesFailed":0,"elapsedMs":161905}
 {"timestamp":"2026-02-23T01:12:18.686Z","batchSize":5000,"entitiesBefore":42098,"relationsBefore":0,"entitiesAfter":193,"relationsAfter":0,"opsAttempted":41905,"batchesCompleted":9,"batchesFailed":0,"elapsedMs":163311}
 {"timestamp":"2026-02-23T01:20:55.695Z","batchSize":5000,"entitiesBefore":193,"relationsBefore":0,"entitiesAfter":0,"relationsAfter":0,"opsAttempted":193,"batchesCompleted":1,"batchesFailed":0,"elapsedMs":14055}
+{"timestamp":"2026-03-09T11:46:05.653Z","batchSize":5000,"entitiesBefore":872,"relationsBefore":2540,"entitiesAfter":849,"relationsAfter":0,"opsAttempted":2563,"batchesCompleted":1,"batchesFailed":0,"elapsedMs":13343}
+{"timestamp":"2026-03-09T11:46:59.705Z","batchSize":5000,"entitiesBefore":849,"relationsBefore":0,"entitiesAfter":848,"relationsAfter":0,"opsAttempted":1,"batchesCompleted":1,"batchesFailed":0,"elapsedMs":14706}
+{"timestamp":"2026-03-09T12:00:55.330Z","batchSize":5000,"entitiesBefore":864,"relationsBefore":31,"entitiesAfter":865,"relationsAfter":2,"opsAttempted":31,"batchesCompleted":1,"batchesFailed":0,"elapsedMs":13669}
+{"timestamp":"2026-03-09T12:01:25.522Z","batchSize":5000,"entitiesBefore":865,"relationsBefore":2,"entitiesAfter":865,"relationsAfter":0,"opsAttempted":2,"batchesCompleted":1,"batchesFailed":0,"elapsedMs":13235}
+{"timestamp":"2026-03-09T12:09:28.560Z","batchSize":5000,"entitiesBefore":877,"relationsBefore":23,"entitiesAfter":876,"relationsAfter":0,"opsAttempted":24,"batchesCompleted":1,"batchesFailed":0,"elapsedMs":13366}
+{"timestamp":"2026-03-09T12:23:12.369Z","batchSize":5000,"entitiesBefore":889,"relationsBefore":25,"entitiesAfter":888,"relationsAfter":0,"opsAttempted":26,"batchesCompleted":1,"batchesFailed":0,"elapsedMs":13440}
+{"timestamp":"2026-03-09T12:36:13.347Z","batchSize":5000,"entitiesBefore":901,"relationsBefore":32,"entitiesAfter":900,"relationsAfter":0,"opsAttempted":33,"batchesCompleted":1,"batchesFailed":0,"elapsedMs":13705}
