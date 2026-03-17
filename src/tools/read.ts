@@ -621,4 +621,125 @@ export function registerReadTools(server: McpServer): void {
       }
     },
   );
+
+  // ── 11. get_page_content ────────────────────────────────────────────
+  server.tool(
+    'get_page_content',
+    'Get the ordered content blocks of a page entity. Returns text (Markdown) and image blocks in position order.',
+    {
+      entityId: z.string().describe('Entity ID (dashless hex) of the page to fetch content blocks for'),
+    },
+    { readOnlyHint: true },
+    async ({ entityId }) => {
+      try {
+        const uuid = normalizeToUUID(entityId);
+
+        // Step 1: Fetch entity with its relations
+        const entityGql = `
+          query GetEntity($id: UUID!) {
+            entity(id: $id) {
+              id
+              name
+              relationsList {
+                id
+                toEntityId
+                typeId
+                position
+                typeEntity { id name }
+                toEntity { id name }
+              }
+            }
+          }
+        `;
+
+        const entityData = await query<{
+          entity: {
+            id: string;
+            name: string;
+            relationsList: Array<{
+              id: string;
+              toEntityId: string;
+              typeId: string;
+              position: string | null;
+              typeEntity: { id: string; name: string } | null;
+              toEntity: { id: string; name: string } | null;
+            }>;
+          } | null;
+        }>(entityGql, { id: uuid });
+
+        if (!entityData.entity) {
+          return err(`Entity not found: ${entityId}`);
+        }
+
+        // Step 2: Filter for Blocks relations
+        const blocks = entityData.entity.relationsList.filter(
+          (r) => r.typeEntity?.name === 'Blocks',
+        );
+
+        if (blocks.length === 0) {
+          return ok({ entityId, name: entityData.entity.name, blocks: [] });
+        }
+
+        // Step 3: Sort by position (lexicographic)
+        blocks.sort((a, b) => (a.position ?? '').localeCompare(b.position ?? ''));
+
+        // Step 4: Batch-query all block entities using GraphQL aliases
+        const aliasedQueries = blocks
+          .map((b, i) => {
+            const blockUuid = normalizeToUUID(b.toEntityId);
+            return `block_${i}: entity(id: "${blockUuid}") { id name valuesList { id text property { name } } }`;
+          })
+          .join('\n          ');
+
+        const batchGql = `query BatchBlocks { ${aliasedQueries} }`;
+
+        const batchData = await query<Record<string, {
+          id: string;
+          name: string;
+          valuesList: Array<{ id: string; text: string | null; property: { name: string } | null }>;
+        } | null>>(batchGql);
+
+        // Step 5 & 6: Extract content from each block
+        const contentBlocks = blocks.map((b, i) => {
+          const blockEntity = batchData[`block_${i}`];
+          if (!blockEntity) {
+            return {
+              position: b.position,
+              type: 'text' as const,
+              content: null,
+              entityId: toDashlessUUID(b.toEntityId),
+              name: b.toEntity?.name ?? null,
+            };
+          }
+
+          const mdValue = blockEntity.valuesList.find(
+            (v) => v.property?.name === 'Markdown content',
+          );
+
+          if (mdValue?.text) {
+            return {
+              position: b.position,
+              type: 'text' as const,
+              content: mdValue.text,
+              entityId: toDashlessUUID(blockEntity.id),
+              name: blockEntity.name,
+            };
+          }
+
+          // No Markdown content — check if it's an image block
+          return {
+            position: b.position,
+            type: 'image' as const,
+            content: null,
+            entityId: toDashlessUUID(blockEntity.id),
+            name: blockEntity.name,
+          };
+        });
+
+        return ok({ entityId, name: entityData.entity.name, blocks: contentBlocks });
+      } catch (error) {
+        return err(error);
+      }
+    },
+  );
 }
