@@ -15,12 +15,14 @@ MCP server that provides full access to the Geo protocol SDK for knowledge graph
 - `src/tools/workspace.ts` - Workspace entity CRUD (notes, tasks, projects)
 - `src/tools/helpers.ts` - Shared `ok()`/`err()` MCP response helpers
 - `src/utils/wallet.ts` - Shared wallet configuration helpers (ensureWalletConfigured, normalizeAddress)
+- `src/utils/tx-executor.ts` - Dual-mode transaction executor (PRIVATE_KEY vs APPROVAL)
 - `src/api/client.ts` - Fetch-based GraphQL client + UUID format helpers
 
 ## Key Design Decisions
 
 - **Session-based op accumulation**: All graph operations auto-accumulate ops in a singleton session. `publish_edit` sends all accumulated ops as one edit, then clears the session.
 - **Smart account by default**: Uses Geo's gas-sponsored smart accounts (Pimlico paymaster) so users don't need testnet ETH.
+- **Dual wallet mode**: `executeTransaction()` abstracts over PRIVATE_KEY (auto-sign) and APPROVAL (return unsigned tx) modes. See `.claude/skills/wallet-approval-mode/` for the full pattern, especially the multi-tx continuation chain for propose -> vote -> execute.
 - **Name-based resolution**: High-level tools like `create_knowledge_graph` resolve references by name, not ID.
 - **Dashless UUID convention**: All IDs returned to MCP consumers use dashless 32-char hex. The GraphQL API uses dashed UUIDs internally.
 
@@ -131,6 +133,14 @@ The `mcp_deployments_registry` repo is the agent hub with 20+ agents and 70+ ski
 - `.claude/skills/geo-entity-creation/`, `geo-dao-management/` — Geo operation skills
 
 Pushing changes to `.claude/agents/**` or `.claude/skills/**` in `mcp_deployments_registry` auto-triggers agent gateway redeployment via CI (`.github/workflows/deploy-agent-gateway.yml`).
+
+## Skills & Agents (this repo)
+
+- `.claude/skills/publish-research/` - Research paper publishing workflow (canonical ontology IDs, DAO proposal flow)
+- `.claude/skills/clear-dao-space/` - DAO space cleanup reference (`disable-model-invocation: true`)
+- `.claude/skills/wallet-approval-mode/` - Dual-mode wallet architecture: `executeTransaction()`, multi-tx continuation chains, `submit_signed_transaction`, adding new write tools
+- `.claude/skills/mcp-tool-result-detection/` - Parsing MCP tool results: slug prefix stripping, x402 receipt removal, dual JSON format parsing (background knowledge, `user-invocable: false`)
+- `.claude/agents/geo-explorer.md` - Read-only KG exploration agent (haiku model)
 
 ## Related Repositories
 

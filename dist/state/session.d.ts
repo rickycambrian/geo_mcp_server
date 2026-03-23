@@ -4,6 +4,8 @@
  */
 import type { Op } from '@geoprotocol/grc-20';
 import type { GeoSmartAccount } from '@geoprotocol/geo-sdk';
+import type { PendingTransaction, TransactionContinuation } from '../utils/tx-executor.js';
+export type WalletMode = 'PRIVATE_KEY' | 'APPROVAL';
 export interface CreatedArtifact {
     id: string;
     type: 'property' | 'type' | 'entity' | 'relation' | 'image';
@@ -18,6 +20,8 @@ export interface SessionStatus {
     spaceId: string | null;
     walletAddress: string | null;
     network: 'TESTNET';
+    mode: 'full' | 'read-only' | 'approval';
+    pendingTransactionCount: number;
 }
 export declare class EditSession {
     private ops;
@@ -27,6 +31,9 @@ export declare class EditSession {
     private _spaceId;
     private _walletAddress;
     private _smartAccountClient;
+    private _walletMode;
+    private _pendingTransactions;
+    private _continuations;
     addOps(ops: Op[], artifact: CreatedArtifact): void;
     getOps(): Op[];
     setLastPublishedOps(ops: Op[]): void;
@@ -44,6 +51,15 @@ export declare class EditSession {
     set walletAddress(address: string | null);
     get smartAccountClient(): GeoSmartAccount | null;
     set smartAccountClient(client: GeoSmartAccount | null);
+    get walletMode(): WalletMode;
+    set walletMode(mode: WalletMode);
+    get pendingTransactions(): PendingTransaction[];
+    addPendingTransaction(tx: PendingTransaction): void;
+    getPendingTransaction(id: string): PendingTransaction | undefined;
+    removePendingTransaction(id: string): boolean;
+    addContinuation(c: TransactionContinuation): void;
+    getContinuation(pendingTxId: string): TransactionContinuation | undefined;
+    removeContinuation(pendingTxId: string): boolean;
     getStatus(): SessionStatus;
 }
 export declare const session: EditSession;

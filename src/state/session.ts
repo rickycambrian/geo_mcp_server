@@ -4,6 +4,9 @@
  */
 import type { Op } from '@geoprotocol/grc-20';
 import type { GeoSmartAccount } from '@geoprotocol/geo-sdk';
+import type { PendingTransaction, TransactionContinuation } from '../utils/tx-executor.js';
+
+export type WalletMode = 'PRIVATE_KEY' | 'APPROVAL';
 
 export interface CreatedArtifact {
   id: string;
@@ -20,6 +23,8 @@ export interface SessionStatus {
   spaceId: string | null;
   walletAddress: string | null;
   network: 'TESTNET';
+  mode: 'full' | 'read-only' | 'approval';
+  pendingTransactionCount: number;
 }
 
 export class EditSession {
@@ -30,6 +35,9 @@ export class EditSession {
   private _spaceId: string | null = null;
   private _walletAddress: string | null = null;
   private _smartAccountClient: GeoSmartAccount | null = null;
+  private _walletMode: WalletMode = 'PRIVATE_KEY';
+  private _pendingTransactions: PendingTransaction[] = [];
+  private _continuations: Map<string, TransactionContinuation> = new Map();
 
   addOps(ops: Op[], artifact: CreatedArtifact): void {
     this.ops.push(...ops);
@@ -58,6 +66,8 @@ export class EditSession {
     if (options?.includeLastPublished) {
       this.lastPublishedOps = [];
     }
+    this._pendingTransactions = [];
+    this._continuations = new Map();
   }
 
   get opsCount(): number {
@@ -96,15 +106,74 @@ export class EditSession {
     this._smartAccountClient = client;
   }
 
+  get walletMode(): WalletMode {
+    return this._walletMode;
+  }
+
+  set walletMode(mode: WalletMode) {
+    this._walletMode = mode;
+  }
+
+  // ── Pending transactions ───────────────────────────────────────────
+
+  get pendingTransactions(): PendingTransaction[] {
+    return [...this._pendingTransactions];
+  }
+
+  addPendingTransaction(tx: PendingTransaction): void {
+    this._pendingTransactions.push(tx);
+  }
+
+  getPendingTransaction(id: string): PendingTransaction | undefined {
+    return this._pendingTransactions.find((tx) => tx.id === id);
+  }
+
+  removePendingTransaction(id: string): boolean {
+    const idx = this._pendingTransactions.findIndex((tx) => tx.id === id);
+    if (idx === -1) return false;
+    this._pendingTransactions.splice(idx, 1);
+    return true;
+  }
+
+  // ── Continuations ──────────────────────────────────────────────────
+
+  addContinuation(c: TransactionContinuation): void {
+    this._continuations.set(c.pendingTxId, c);
+  }
+
+  getContinuation(pendingTxId: string): TransactionContinuation | undefined {
+    return this._continuations.get(pendingTxId);
+  }
+
+  removeContinuation(pendingTxId: string): boolean {
+    return this._continuations.delete(pendingTxId);
+  }
+
   getStatus(): SessionStatus {
+    const walletConfigured =
+      this._walletMode === 'APPROVAL'
+        ? this._walletAddress !== null
+        : this._privateKey !== null;
+
+    let mode: 'full' | 'read-only' | 'approval';
+    if (this._walletMode === 'APPROVAL' && this._walletAddress !== null) {
+      mode = 'approval';
+    } else if (walletConfigured) {
+      mode = 'full';
+    } else {
+      mode = 'read-only';
+    }
+
     return {
       opsCount: this.ops.length,
       lastPublishedOpsCount: this.lastPublishedOps.length,
       artifacts: [...this.artifacts],
-      walletConfigured: this._privateKey !== null,
+      walletConfigured,
       spaceId: this._spaceId,
       walletAddress: this._walletAddress,
       network: 'TESTNET',
+      mode,
+      pendingTransactionCount: this._pendingTransactions.length,
     };
   }
 }

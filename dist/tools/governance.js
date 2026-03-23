@@ -1,12 +1,11 @@
-import { TESTNET_RPC_URL } from '@geoprotocol/geo-sdk';
 import { MainVotingAbi } from '@geoprotocol/geo-sdk/abis';
-import { createPublicClient, encodeFunctionData, http, stringToHex } from 'viem';
+import { encodeFunctionData, stringToHex } from 'viem';
 import { z } from 'zod';
 import { ensureWalletConfigured, normalizeAddress } from '../utils/wallet.js';
+import { executeTransaction } from '../utils/tx-executor.js';
 import { ok, err } from './helpers.js';
 const VOTE_OPTIONS = { YES: 2, NO: 3, ABSTAIN: 1 };
 export function registerGovernanceTools(server, session) {
-    const publicClient = createPublicClient({ transport: http(TESTNET_RPC_URL) });
     // ── vote_on_proposal ─────────────────────────────────────────────
     server.tool('vote_on_proposal', 'Cast a vote on a DAO proposal (YES, NO, or ABSTAIN)', {
         mainVotingAddress: z.string().describe('0x address of the MainVoting plugin contract'),
@@ -19,8 +18,11 @@ export function registerGovernanceTools(server, session) {
     }, { readOnlyHint: false }, async ({ mainVotingAddress, proposalId, vote, tryEarlyExecution }) => {
         try {
             const ensured = await ensureWalletConfigured(session);
-            if (!ensured.ok || !session.smartAccountClient) {
-                return err(ensured.ok ? 'Wallet not configured.' : ensured.error);
+            if (!ensured.ok) {
+                return err(ensured.error);
+            }
+            if (session.walletMode !== 'APPROVAL' && !session.smartAccountClient) {
+                return err('Wallet not configured.');
             }
             const normalizedAddress = normalizeAddress(mainVotingAddress, 'mainVotingAddress');
             const voteOption = VOTE_OPTIONS[vote];
@@ -29,12 +31,17 @@ export function registerGovernanceTools(server, session) {
                 functionName: 'vote',
                 args: [BigInt(proposalId), voteOption, tryEarlyExecution],
             });
-            const txHash = await session.smartAccountClient.sendTransaction({
+            const txResult = await executeTransaction(session, {
                 to: normalizedAddress,
                 data,
+                description: `Vote ${vote} on proposal ${proposalId}`,
+                toolName: 'vote_on_proposal',
+                metadata: { proposalId, vote, tryEarlyExecution },
             });
-            await publicClient.waitForTransactionReceipt({ hash: txHash });
-            return ok({ txHash, proposalId, vote, tryEarlyExecution });
+            if (txResult.mode === 'pending_approval') {
+                return ok({ status: 'pending_signature', ...txResult.pendingTx });
+            }
+            return ok({ txHash: txResult.txHash, proposalId, vote, tryEarlyExecution });
         }
         catch (error) {
             return err(error);
@@ -48,8 +55,11 @@ export function registerGovernanceTools(server, session) {
     }, { readOnlyHint: false }, async ({ mainVotingAddress, editorAddress, ipfsUri }) => {
         try {
             const ensured = await ensureWalletConfigured(session);
-            if (!ensured.ok || !session.smartAccountClient) {
-                return err(ensured.ok ? 'Wallet not configured.' : ensured.error);
+            if (!ensured.ok) {
+                return err(ensured.error);
+            }
+            if (session.walletMode !== 'APPROVAL' && !session.smartAccountClient) {
+                return err('Wallet not configured.');
             }
             const normalizedMainVoting = normalizeAddress(mainVotingAddress, 'mainVotingAddress');
             const normalizedEditor = normalizeAddress(editorAddress, 'editorAddress');
@@ -58,12 +68,17 @@ export function registerGovernanceTools(server, session) {
                 functionName: 'proposeAddEditor',
                 args: [stringToHex(ipfsUri), normalizedEditor],
             });
-            const txHash = await session.smartAccountClient.sendTransaction({
+            const txResult = await executeTransaction(session, {
                 to: normalizedMainVoting,
                 data,
+                description: `Propose adding editor ${normalizedEditor}`,
+                toolName: 'propose_accept_editor',
+                metadata: { editorAddress: normalizedEditor, ipfsUri },
             });
-            await publicClient.waitForTransactionReceipt({ hash: txHash });
-            return ok({ txHash, editorAddress: normalizedEditor, ipfsUri });
+            if (txResult.mode === 'pending_approval') {
+                return ok({ status: 'pending_signature', ...txResult.pendingTx });
+            }
+            return ok({ txHash: txResult.txHash, editorAddress: normalizedEditor, ipfsUri });
         }
         catch (error) {
             return err(error);
@@ -77,8 +92,11 @@ export function registerGovernanceTools(server, session) {
     }, { readOnlyHint: false }, async ({ mainVotingAddress, editorAddress, ipfsUri }) => {
         try {
             const ensured = await ensureWalletConfigured(session);
-            if (!ensured.ok || !session.smartAccountClient) {
-                return err(ensured.ok ? 'Wallet not configured.' : ensured.error);
+            if (!ensured.ok) {
+                return err(ensured.error);
+            }
+            if (session.walletMode !== 'APPROVAL' && !session.smartAccountClient) {
+                return err('Wallet not configured.');
             }
             const normalizedMainVoting = normalizeAddress(mainVotingAddress, 'mainVotingAddress');
             const normalizedEditor = normalizeAddress(editorAddress, 'editorAddress');
@@ -87,12 +105,17 @@ export function registerGovernanceTools(server, session) {
                 functionName: 'proposeRemoveEditor',
                 args: [stringToHex(ipfsUri), normalizedEditor],
             });
-            const txHash = await session.smartAccountClient.sendTransaction({
+            const txResult = await executeTransaction(session, {
                 to: normalizedMainVoting,
                 data,
+                description: `Propose removing editor ${normalizedEditor}`,
+                toolName: 'propose_remove_editor',
+                metadata: { editorAddress: normalizedEditor, ipfsUri },
             });
-            await publicClient.waitForTransactionReceipt({ hash: txHash });
-            return ok({ txHash, editorAddress: normalizedEditor, ipfsUri });
+            if (txResult.mode === 'pending_approval') {
+                return ok({ status: 'pending_signature', ...txResult.pendingTx });
+            }
+            return ok({ txHash: txResult.txHash, editorAddress: normalizedEditor, ipfsUri });
         }
         catch (error) {
             return err(error);
@@ -107,8 +130,11 @@ export function registerGovernanceTools(server, session) {
     }, { readOnlyHint: false }, async ({ mainVotingAddress, spacePluginAddress, subspaceAddress, ipfsUri }) => {
         try {
             const ensured = await ensureWalletConfigured(session);
-            if (!ensured.ok || !session.smartAccountClient) {
-                return err(ensured.ok ? 'Wallet not configured.' : ensured.error);
+            if (!ensured.ok) {
+                return err(ensured.error);
+            }
+            if (session.walletMode !== 'APPROVAL' && !session.smartAccountClient) {
+                return err('Wallet not configured.');
             }
             const normalizedMainVoting = normalizeAddress(mainVotingAddress, 'mainVotingAddress');
             const normalizedSpacePlugin = normalizeAddress(spacePluginAddress, 'spacePluginAddress');
@@ -118,13 +144,18 @@ export function registerGovernanceTools(server, session) {
                 functionName: 'proposeAcceptSubspace',
                 args: [stringToHex(ipfsUri), normalizedSubspace, normalizedSpacePlugin],
             });
-            const txHash = await session.smartAccountClient.sendTransaction({
+            const txResult = await executeTransaction(session, {
                 to: normalizedMainVoting,
                 data,
+                description: `Propose accepting subspace ${normalizedSubspace}`,
+                toolName: 'propose_accept_subspace',
+                metadata: { subspaceAddress: normalizedSubspace, spacePluginAddress: normalizedSpacePlugin, ipfsUri },
             });
-            await publicClient.waitForTransactionReceipt({ hash: txHash });
+            if (txResult.mode === 'pending_approval') {
+                return ok({ status: 'pending_signature', ...txResult.pendingTx });
+            }
             return ok({
-                txHash,
+                txHash: txResult.txHash,
                 subspaceAddress: normalizedSubspace,
                 spacePluginAddress: normalizedSpacePlugin,
                 ipfsUri,
@@ -143,8 +174,11 @@ export function registerGovernanceTools(server, session) {
     }, { readOnlyHint: false }, async ({ mainVotingAddress, spacePluginAddress, subspaceAddress, ipfsUri }) => {
         try {
             const ensured = await ensureWalletConfigured(session);
-            if (!ensured.ok || !session.smartAccountClient) {
-                return err(ensured.ok ? 'Wallet not configured.' : ensured.error);
+            if (!ensured.ok) {
+                return err(ensured.error);
+            }
+            if (session.walletMode !== 'APPROVAL' && !session.smartAccountClient) {
+                return err('Wallet not configured.');
             }
             const normalizedMainVoting = normalizeAddress(mainVotingAddress, 'mainVotingAddress');
             const normalizedSpacePlugin = normalizeAddress(spacePluginAddress, 'spacePluginAddress');
@@ -154,13 +188,18 @@ export function registerGovernanceTools(server, session) {
                 functionName: 'proposeRemoveSubspace',
                 args: [stringToHex(ipfsUri), normalizedSubspace, normalizedSpacePlugin],
             });
-            const txHash = await session.smartAccountClient.sendTransaction({
+            const txResult = await executeTransaction(session, {
                 to: normalizedMainVoting,
                 data,
+                description: `Propose removing subspace ${normalizedSubspace}`,
+                toolName: 'propose_remove_subspace',
+                metadata: { subspaceAddress: normalizedSubspace, spacePluginAddress: normalizedSpacePlugin, ipfsUri },
             });
-            await publicClient.waitForTransactionReceipt({ hash: txHash });
+            if (txResult.mode === 'pending_approval') {
+                return ok({ status: 'pending_signature', ...txResult.pendingTx });
+            }
             return ok({
-                txHash,
+                txHash: txResult.txHash,
                 subspaceAddress: normalizedSubspace,
                 spacePluginAddress: normalizedSpacePlugin,
                 ipfsUri,

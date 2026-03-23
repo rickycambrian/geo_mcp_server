@@ -70,6 +70,7 @@ describe('ensureWalletConfigured', () => {
       privateKey: null,
       walletAddress: null,
       smartAccountClient: null,
+      walletMode: 'PRIVATE_KEY',
     };
   });
 
@@ -106,5 +107,23 @@ describe('ensureWalletConfigured', () => {
     const result = await ensureWalletConfigured(mockSession, '0x' + 'ff'.repeat(32));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain('Invalid key');
+  });
+
+  it('returns ok in APPROVAL mode with walletAddress set', async () => {
+    mockSession.walletMode = 'APPROVAL';
+    mockSession.walletAddress = '0x1234567890abcdef1234567890abcdef12345678';
+    const result = await ensureWalletConfigured(mockSession);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.address).toBe('0x1234567890abcdef1234567890abcdef12345678');
+    }
+    expect(mockGetClient).not.toHaveBeenCalled();
+  });
+
+  it('falls through to error in APPROVAL mode without walletAddress', async () => {
+    mockSession.walletMode = 'APPROVAL';
+    delete process.env.GEO_PRIVATE_KEY;
+    const result = await ensureWalletConfigured(mockSession);
+    expect(result.ok).toBe(false);
   });
 });

@@ -22,6 +22,10 @@ export function normalizeBytes16Hex(value, field) {
     return normalized;
 }
 export async function ensureWalletConfigured(session, privateKeyOverride) {
+    // APPROVAL mode: address set without private key — no smart account needed
+    if (session.walletMode === 'APPROVAL' && session.walletAddress) {
+        return { ok: true, address: session.walletAddress };
+    }
     const normalizedOverride = privateKeyOverride ? withHexPrefix(privateKeyOverride) : null;
     const normalizedSessionKey = session.privateKey ? withHexPrefix(session.privateKey) : null;
     const sessionClient = session.smartAccountClient;

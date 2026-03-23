@@ -9,8 +9,8 @@ import { registerWorkspaceTools } from './tools/workspace.js';
 export function createServer() {
     const server = new McpServer({
         name: 'geo-mcp-server',
-        version: '1.6.1',
-        description: 'Geo knowledge graph MCP server. Works in read-only mode without configuration. Set GEO_PRIVATE_KEY or call configure_wallet to enable write operations.',
+        version: '1.8.0',
+        description: 'Geo knowledge graph MCP server. Works in read-only mode without configuration. Set GEO_PRIVATE_KEY or call configure_wallet to enable write operations. Supports APPROVAL mode for external wallet signing.',
     });
     registerGraphTools(server, session);
     registerSpaceTools(server, session);

@@ -1,9 +1,8 @@
 import { z } from 'zod';
-import { Account, Graph, personalSpace, daoSpace, TESTNET_RPC_URL, } from '@geoprotocol/geo-sdk';
-import { createPublicClient, http } from 'viem';
+import { Account, Graph, personalSpace, daoSpace, } from '@geoprotocol/geo-sdk';
 import { query, normalizeToUUID } from '../api/client.js';
 import { ensureWalletConfigured, normalizeAddress, normalizeBytes16Hex } from '../utils/wallet.js';
-const publicClient = createPublicClient({ transport: http(TESTNET_RPC_URL) });
+import { executeTransaction } from '../utils/tx-executor.js';
 const NOTE_META_PREFIX = '[kf.note.meta]';
 const TASK_META_PREFIX = '[kf.task.meta]';
 const SYSTEM_IDS = {
@@ -42,8 +41,11 @@ function getTypeId(kind) {
 }
 async function ensureSpaceReady(session) {
     const ensured = await ensureWalletConfigured(session);
-    if (!ensured.ok || !session.walletAddress || !session.smartAccountClient) {
+    if (!ensured.ok || !session.walletAddress) {
         return { ok: false, error: ensured.ok ? 'Wallet not configured.' : ensured.error };
+    }
+    if (session.walletMode !== 'APPROVAL' && !session.smartAccountClient) {
+        return { ok: false, error: 'Wallet not configured.' };
     }
     if (!session.spaceId) {
         return { ok: false, error: 'Space not set up. Call setup_space first.' };
@@ -117,7 +119,7 @@ export function registerWorkspaceTools(server, session) {
         votingMode: z.enum(['FAST', 'SLOW']).optional(),
     }, { readOnlyHint: false }, async ({ kind, name, entityId, description, markdownContent, noteType, tags, status, priority, dueDate, visibility, daoSpaceAddress, daoSpaceId, votingMode, }) => {
         const ready = await ensureSpaceReady(session);
-        if (!ready.ok || !session.walletAddress || !session.smartAccountClient || !session.spaceId) {
+        if (!ready.ok || !session.walletAddress || !session.spaceId) {
             return err(ready.ok ? 'Wallet/space not configured.' : ready.error);
         }
         if (visibility === 'public' && (!daoSpaceAddress || !daoSpaceId || !votingMode)) {
@@ -166,12 +168,20 @@ export function registerWorkspaceTools(server, session) {
                     author: accountId,
                     network: 'TESTNET',
                 });
-                const txHash = await session.smartAccountClient.sendTransaction({ to, data: calldata });
-                await publicClient.waitForTransactionReceipt({ hash: txHash });
+                const txResult = await executeTransaction(session, {
+                    to,
+                    data: calldata,
+                    description: `Publish workspace ${kind}: ${name}`,
+                    toolName: 'upsert_workspace_entity',
+                    metadata: { entityId: mutation.id, editId, cid },
+                });
+                if (txResult.mode === 'pending_approval') {
+                    return ok({ status: 'pending_signature', ...txResult.pendingTx, entityId: mutation.id, editId, cid });
+                }
                 return ok({
                     entityId: mutation.id,
                     publishMode: 'published',
-                    txHash,
+                    txHash: txResult.txHash,
                     editId,
                     cid,
                 });
@@ -189,16 +199,21 @@ export function registerWorkspaceTools(server, session) {
                 votingMode: votingMode,
                 network: 'TESTNET',
             });
-            const txHash = await session.smartAccountClient.sendTransaction({
+            const txResult = await executeTransaction(session, {
                 to: proposal.to,
                 data: proposal.calldata,
+                description: `Propose workspace ${kind}: ${name}`,
+                toolName: 'upsert_workspace_entity',
+                metadata: { entityId: mutation.id, proposalId: proposal.proposalId, editId: proposal.editId, cid: proposal.cid },
             });
-            await publicClient.waitForTransactionReceipt({ hash: txHash });
+            if (txResult.mode === 'pending_approval') {
+                return ok({ status: 'pending_signature', ...txResult.pendingTx, entityId: mutation.id, proposalId: proposal.proposalId });
+            }
             return ok({
                 entityId: mutation.id,
                 publishMode: 'proposal',
                 proposalId: proposal.proposalId,
-                txHash,
+                txHash: txResult.txHash,
                 editId: proposal.editId,
                 cid: proposal.cid,
             });
@@ -216,7 +231,7 @@ export function registerWorkspaceTools(server, session) {
         votingMode: z.enum(['FAST', 'SLOW']).optional(),
     }, { destructiveHint: true }, async ({ entityId, kind, visibility, daoSpaceAddress, daoSpaceId, votingMode }) => {
         const ready = await ensureSpaceReady(session);
-        if (!ready.ok || !session.walletAddress || !session.smartAccountClient || !session.spaceId) {
+        if (!ready.ok || !session.walletAddress || !session.spaceId) {
             return err(ready.ok ? 'Wallet/space not configured.' : ready.error);
         }
         if (visibility === 'public' && (!daoSpaceAddress || !daoSpaceId || !votingMode)) {
@@ -234,12 +249,20 @@ export function registerWorkspaceTools(server, session) {
                     author: accountId,
                     network: 'TESTNET',
                 });
-                const txHash = await session.smartAccountClient.sendTransaction({ to, data: calldata });
-                await publicClient.waitForTransactionReceipt({ hash: txHash });
+                const txResult = await executeTransaction(session, {
+                    to,
+                    data: calldata,
+                    description: `Delete workspace entity: ${entityId}`,
+                    toolName: 'delete_workspace_entity',
+                    metadata: { entityId, editId, cid },
+                });
+                if (txResult.mode === 'pending_approval') {
+                    return ok({ status: 'pending_signature', ...txResult.pendingTx, entityId, editId, cid });
+                }
                 return ok({
                     entityId,
                     publishMode: 'published',
-                    txHash,
+                    txHash: txResult.txHash,
                     editId,
                     cid,
                 });
@@ -257,16 +280,21 @@ export function registerWorkspaceTools(server, session) {
                 votingMode: votingMode,
                 network: 'TESTNET',
             });
-            const txHash = await session.smartAccountClient.sendTransaction({
+            const txResult = await executeTransaction(session, {
                 to: proposal.to,
                 data: proposal.calldata,
+                description: `Propose delete workspace entity: ${entityId}`,
+                toolName: 'delete_workspace_entity',
+                metadata: { entityId, proposalId: proposal.proposalId, editId: proposal.editId, cid: proposal.cid },
             });
-            await publicClient.waitForTransactionReceipt({ hash: txHash });
+            if (txResult.mode === 'pending_approval') {
+                return ok({ status: 'pending_signature', ...txResult.pendingTx, entityId, proposalId: proposal.proposalId });
+            }
             return ok({
                 entityId,
                 publishMode: 'proposal',
                 proposalId: proposal.proposalId,
-                txHash,
+                txHash: txResult.txHash,
                 editId: proposal.editId,
                 cid: proposal.cid,
             });

@@ -71,6 +71,8 @@ describe('governance tools', () => {
       },
       privateKey: '0xkey',
       walletAddress: '0x1234567890abcdef1234567890abcdef12345678',
+      walletMode: 'PRIVATE_KEY',
+      addPendingTransaction: vi.fn(),
     };
   });
 

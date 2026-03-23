@@ -72,5 +72,92 @@ describe('EditSession', () => {
     expect(status.spaceId).toBe('space1');
     expect(status.opsCount).toBe(1);
     expect(status.network).toBe('TESTNET');
+    expect(status.mode).toBe('full');
+    expect(status.pendingTransactionCount).toBe(0);
+  });
+
+  // ── Wallet mode ──────────────────────────────────────────────────
+
+  it('defaults to PRIVATE_KEY wallet mode', () => {
+    expect(session.walletMode).toBe('PRIVATE_KEY');
+  });
+
+  it('can switch to APPROVAL mode', () => {
+    session.walletMode = 'APPROVAL';
+    expect(session.walletMode).toBe('APPROVAL');
+  });
+
+  it('getStatus returns approval mode when walletMode is APPROVAL with address', () => {
+    session.walletMode = 'APPROVAL';
+    session.walletAddress = '0xabc';
+    const status = session.getStatus();
+    expect(status.mode).toBe('approval');
+    expect(status.walletConfigured).toBe(true);
+  });
+
+  it('getStatus returns read-only when APPROVAL mode without address', () => {
+    session.walletMode = 'APPROVAL';
+    const status = session.getStatus();
+    expect(status.mode).toBe('read-only');
+    expect(status.walletConfigured).toBe(false);
+  });
+
+  // ── Pending transactions ─────────────────────────────────────────
+
+  it('starts with empty pending transactions', () => {
+    expect(session.pendingTransactions).toEqual([]);
+  });
+
+  it('adds and retrieves pending transactions', () => {
+    const tx = { id: 'tx1', to: '0x1' as `0x${string}`, data: '0x2' as `0x${string}`, description: 'test', toolName: 'test' };
+    session.addPendingTransaction(tx);
+    expect(session.pendingTransactions).toHaveLength(1);
+    expect(session.getPendingTransaction('tx1')).toEqual(tx);
+  });
+
+  it('removes pending transactions', () => {
+    const tx = { id: 'tx1', to: '0x1' as `0x${string}`, data: '0x2' as `0x${string}`, description: 'test', toolName: 'test' };
+    session.addPendingTransaction(tx);
+    expect(session.removePendingTransaction('tx1')).toBe(true);
+    expect(session.pendingTransactions).toHaveLength(0);
+    expect(session.removePendingTransaction('tx1')).toBe(false);
+  });
+
+  it('pendingTransactions getter returns a copy', () => {
+    const tx = { id: 'tx1', to: '0x1' as `0x${string}`, data: '0x2' as `0x${string}`, description: 'test', toolName: 'test' };
+    session.addPendingTransaction(tx);
+    const copy = session.pendingTransactions;
+    copy.push({ id: 'tx2', to: '0x3' as `0x${string}`, data: '0x4' as `0x${string}`, description: 'test2', toolName: 'test2' });
+    expect(session.pendingTransactions).toHaveLength(1);
+  });
+
+  it('getStatus includes pendingTransactionCount', () => {
+    const tx = { id: 'tx1', to: '0x1' as `0x${string}`, data: '0x2' as `0x${string}`, description: 'test', toolName: 'test' };
+    session.addPendingTransaction(tx);
+    expect(session.getStatus().pendingTransactionCount).toBe(1);
+  });
+
+  // ── Continuations ────────────────────────────────────────────────
+
+  it('adds and retrieves continuations', () => {
+    const cont = { pendingTxId: 'tx1', onComplete: 'auto_vote' as const, context: { proposalId: 'p1' } };
+    session.addContinuation(cont);
+    expect(session.getContinuation('tx1')).toEqual(cont);
+  });
+
+  it('removes continuations', () => {
+    const cont = { pendingTxId: 'tx1', onComplete: 'auto_vote' as const, context: {} };
+    session.addContinuation(cont);
+    expect(session.removeContinuation('tx1')).toBe(true);
+    expect(session.getContinuation('tx1')).toBeUndefined();
+    expect(session.removeContinuation('tx1')).toBe(false);
+  });
+
+  it('clear resets pending transactions and continuations', () => {
+    session.addPendingTransaction({ id: 'tx1', to: '0x1' as `0x${string}`, data: '0x2' as `0x${string}`, description: 'test', toolName: 'test' });
+    session.addContinuation({ pendingTxId: 'tx1', onComplete: 'auto_vote' as const, context: {} });
+    session.clear();
+    expect(session.pendingTransactions).toHaveLength(0);
+    expect(session.getContinuation('tx1')).toBeUndefined();
   });
 });

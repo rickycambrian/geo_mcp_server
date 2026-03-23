@@ -6,6 +6,9 @@ export class EditSession {
     _spaceId = null;
     _walletAddress = null;
     _smartAccountClient = null;
+    _walletMode = 'PRIVATE_KEY';
+    _pendingTransactions = [];
+    _continuations = new Map();
     addOps(ops, artifact) {
         this.ops.push(...ops);
         this.artifacts.push(artifact);
@@ -28,6 +31,8 @@ export class EditSession {
         if (options?.includeLastPublished) {
             this.lastPublishedOps = [];
         }
+        this._pendingTransactions = [];
+        this._continuations = new Map();
     }
     get opsCount() {
         return this.ops.length;
@@ -56,15 +61,63 @@ export class EditSession {
     set smartAccountClient(client) {
         this._smartAccountClient = client;
     }
+    get walletMode() {
+        return this._walletMode;
+    }
+    set walletMode(mode) {
+        this._walletMode = mode;
+    }
+    // ── Pending transactions ───────────────────────────────────────────
+    get pendingTransactions() {
+        return [...this._pendingTransactions];
+    }
+    addPendingTransaction(tx) {
+        this._pendingTransactions.push(tx);
+    }
+    getPendingTransaction(id) {
+        return this._pendingTransactions.find((tx) => tx.id === id);
+    }
+    removePendingTransaction(id) {
+        const idx = this._pendingTransactions.findIndex((tx) => tx.id === id);
+        if (idx === -1)
+            return false;
+        this._pendingTransactions.splice(idx, 1);
+        return true;
+    }
+    // ── Continuations ──────────────────────────────────────────────────
+    addContinuation(c) {
+        this._continuations.set(c.pendingTxId, c);
+    }
+    getContinuation(pendingTxId) {
+        return this._continuations.get(pendingTxId);
+    }
+    removeContinuation(pendingTxId) {
+        return this._continuations.delete(pendingTxId);
+    }
     getStatus() {
+        const walletConfigured = this._walletMode === 'APPROVAL'
+            ? this._walletAddress !== null
+            : this._privateKey !== null;
+        let mode;
+        if (this._walletMode === 'APPROVAL' && this._walletAddress !== null) {
+            mode = 'approval';
+        }
+        else if (walletConfigured) {
+            mode = 'full';
+        }
+        else {
+            mode = 'read-only';
+        }
         return {
             opsCount: this.ops.length,
             lastPublishedOpsCount: this.lastPublishedOps.length,
             artifacts: [...this.artifacts],
-            walletConfigured: this._privateKey !== null,
+            walletConfigured,
             spaceId: this._spaceId,
             walletAddress: this._walletAddress,
             network: 'TESTNET',
+            mode,
+            pendingTransactionCount: this._pendingTransactions.length,
         };
     }
 }
